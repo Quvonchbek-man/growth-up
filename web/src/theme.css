@@ -1,0 +1,505 @@
+/*
+  Ranglar ikki manbadan keladi:
+
+  1. Interfeys ranglari — Telegram beradigan `--tg-theme-*` o'zgaruvchilari.
+     Shu tufayli ilova foydalanuvchining mavzusiga o'zi moslashadi.
+  2. Grafik ranglari — tekshiruvdan o'tgan qat'iy palitra.
+
+  Nega grafik ranglari Telegram'dan olinmaydi: Telegram tugma rangini
+  foydalanuvchi tanlaydi, u qizil ham, yashil ham bo'lishi mumkin. Ikki
+  qatorli grafikda ranglar bir-biriga yaqin tushib qolsa, ma'lumot o'qilmay
+  qoladi. Grafik palitrasi rang ko'rlik uchun alohida tekshirilgan
+  (deuteran/tritan ΔE >= 9, oq va qora fonda alohida).
+*/
+
+:root {
+  color-scheme: light;
+
+  /* --- Interfeys (Telegram'dan, zaxira qiymatlar bilan) --- */
+  --bg: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  --card: var(--tg-theme-bg-color, #ffffff);
+  --text: var(--tg-theme-text-color, #0b0b0b);
+  --text-dim: var(--tg-theme-hint-color, #7d7d82);
+  --link: var(--tg-theme-link-color, #2a78d6);
+  --accent: var(--tg-theme-button-color, #2a78d6);
+  --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  --danger: var(--tg-theme-destructive-text-color, #d03b3b);
+  --line: rgba(11, 11, 11, 0.1);
+
+  /* --- Grafik: kategoriyali slotlar (tartib o'zgarmaydi) --- */
+  --series-1: #2a78d6; /* ko'k    — men */
+  --series-2: #eb6834; /* to'q sariq — 1-sherik */
+  --series-3: #1baf7a; /* akva   — 2-sherik */
+
+  /* --- Grafik: holat ranglari (hech qachon seriya rangi sifatida emas) --- */
+  --status-good: #0ca30c;
+  --status-critical: #d03b3b;
+  --status-muted: #d8d8dc;
+
+  /* --- Grafik: chizma bezaklari --- */
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --ink-muted: #898781;
+
+  --radius: 14px;
+  --gap: 12px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: var(--tg-theme-secondary-bg-color, #0d0d0d);
+  --card: var(--tg-theme-bg-color, #1a1a19);
+  --text: var(--tg-theme-text-color, #ffffff);
+  --text-dim: var(--tg-theme-hint-color, #a0a0a5);
+  --line: rgba(255, 255, 255, 0.12);
+
+  /* Qorong'i fon uchun ayni sakkiz rangning boshqa pog'onasi —
+     "yorug'ni teskari qilish" emas, alohida tanlangan va tekshirilgan */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+
+  --status-muted: #3a3a3c;
+  --grid: #2c2c2a;
+  --axis: #383835;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  /* Telegram'da pastdagi "tortib yopish" harakati ro'yxat bilan urishmasin */
+  overscroll-behavior-y: contain;
+}
+
+#root {
+  /* Pastki tab paneli uchun joy + iPhone'ning pastki chizig'i */
+  padding: 0 0 calc(72px + env(safe-area-inset-bottom, 0px));
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* ─── Umumiy bloklar ──────────────────────────────────────────────────── */
+
+.page {
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.card--tight {
+  padding: 4px 14px;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 4px 0 0;
+}
+
+h2 {
+  font-size: 15px;
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.small {
+  font-size: 13px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.row--between {
+  justify-content: space-between;
+}
+
+.spread {
+  flex: 1;
+}
+
+/* ─── Statistika plitkalari ───────────────────────────────────────────── */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.tile {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.tile__value {
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.tile__label {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+
+/* ─── Vazifa qatori ───────────────────────────────────────────────────── */
+
+.task {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  user-select: none;
+}
+
+.task:last-child {
+  border-bottom: none;
+}
+
+.task__box {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 7px;
+  border: 2px solid var(--axis);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: #fff;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.task__box--done {
+  background: var(--status-good);
+  border-color: var(--status-good);
+}
+
+.task__box--missed {
+  border-color: var(--status-critical);
+  color: var(--status-critical);
+}
+
+.task__title {
+  flex: 1;
+}
+
+.task--done .task__title {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.task__meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* ─── Tugmalar ────────────────────────────────────────────────────────── */
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn {
+  border: none;
+  border-radius: 10px;
+  padding: 11px 16px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--link);
+  border: 1px solid var(--line);
+}
+
+.btn--small {
+  padding: 7px 12px;
+  font-size: 13px;
+  border-radius: 9px;
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.btn--danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--line);
+}
+
+input[type="text"],
+input[type="time"],
+input[type="number"],
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+/* ─── Progress ────────────────────────────────────────────────────────── */
+
+.bar {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--status-muted);
+  overflow: hidden;
+}
+
+.bar__fill {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--series-1);
+  transition: width 0.25s ease;
+}
+
+/* ─── Tab paneli ──────────────────────────────────────────────────────── */
+
+.tabs {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 20;
+}
+
+.tab {
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  padding: 9px 2px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+}
+
+.tab--active {
+  color: var(--link);
+}
+
+.tab__icon {
+  font-size: 19px;
+  line-height: 1;
+}
+
+/* ─── Sozlamalar oynasi ───────────────────────────────────────────────── */
+
+.iconbtn {
+  border: none;
+  background: var(--card);
+  color: var(--text);
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Har sahifaning yuqori o'ng burchagida suzib turadi. Tab paneliga
+   oltinchi yorliq qo'shsak, 375px ekranda yorliqlar o'qilmay qolardi. */
+.iconbtn--float {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  right: 12px;
+  z-index: 15;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.14);
+}
+
+.sheet__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ─── Grafik ──────────────────────────────────────────────────────────── */
+
+.chart {
+  width: 100%;
+  height: 210px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
+.legend__item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* Heatmap: odat × kun */
+
+.heatmap {
+  overflow-x: auto;
+}
+
+.heatmap__grid {
+  display: grid;
+  gap: 2px;
+  min-width: max-content;
+}
+
+.heatmap__label {
+  font-size: 12px;
+  padding-right: 8px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.cell {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  background: var(--status-muted);
+}
+
+.cell--done {
+  background: var(--status-good);
+}
+
+/* Bajarilmagan: to'ldirish emas, halqa — rang ko'rligida ham farqlansin */
+.cell--missed {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--status-critical);
+}
+
+.cell--skipped {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--axis);
+}
+
+/* ─── Jadval ko'rinishi (grafikka muqobil) ────────────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 7px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+th {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+td.num,
+th.num {
+  text-align: right;
+}
+
+/* ─── Boshqa ──────────────────────────────────────────────────────────── */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 99px;
+  background: var(--bg);
+  font-size: 12px;
+  border: 1px solid var(--line);
+}
+
+.code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 20px;
+  letter-spacing: 3px;
+  font-weight: 600;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 28px 16px;
+  font-size: 14px;
+}
+
+.spinner {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-dim);
+}
+
+.error {
+  background: var(--card);
+  border-left: 3px solid var(--danger);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+}

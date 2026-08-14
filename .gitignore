@@ -1,0 +1,22 @@
+.env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/backups/
+
+# Test bazasi (odatda o'zi o'chadi, lekin test yarim uzilsa qolib ketadi)
+tests/*.db
+.pytest_cache/
+
+web/node_modules/
+web/dist/
+web/.vite/
+
+.DS_Store
+Thumbs.db

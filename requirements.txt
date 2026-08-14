@@ -1,0 +1,22 @@
+# Telegram bot
+aiogram>=3.30.0
+
+# Mini App uchun API
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+
+# Ma'lumotlar bazasi
+sqlalchemy[asyncio]>=2.0.36
+aiosqlite>=0.22.0          # hozirgi holat
+asyncpg>=0.30.0            # Faza 3: Postgres'ga o'tilsa
+
+# Konfiguratsiya
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+python-dotenv>=1.0.1
+
+# Vaqt mintaqalari — Windows'da IANA bazasi yo'q, shuning uchun majburiy
+tzdata>=2025.2
+
+# Eslatma sikli uchun alohida kutubxona YO'Q — oddiy asyncio sikli ishlatiladi
+# (services/scheduler.py). APScheduler bu yerda ortiqcha bog'liqlik bo'lardi.

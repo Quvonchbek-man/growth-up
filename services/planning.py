@@ -1,0 +1,376 @@
+"""Kun, reja va vazifalar bilan ishlash — loyihaning o'zak logikasi.
+
+Asosiy tushuncha: **kun ob'ekti** (`DailyPlan`) + o'sha kunning vazifalari
+(`Task`). Odatlar (`Habit`) shablon bo'lib, kun ochilganda ulardan nusxa
+yaratiladi. Nusxa yaratilgandan keyin odat o'zgarsa, o'tmish o'zgarmaydi.
+"""
+
+from __future__ import annotations
+
+from datetime import date as date_type, timedelta
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from services import scoring
+from shared import clock
+from shared.config import settings
+from shared.models import (
+    DailyPlan,
+    Habit,
+    MissReason,
+    Task,
+    TaskSource,
+    TaskStatus,
+    User,
+)
+
+
+# ─── Foydalanuvchi ───────────────────────────────────────────────────────────
+
+
+async def get_or_create_user(
+    session: AsyncSession,
+    tg_id: int,
+    username: str | None = None,
+    full_name: str = "",
+) -> User:
+    user = await session.get(User, tg_id)
+    if user is None:
+        user = User(
+            id=tg_id,
+            username=username,
+            full_name=full_name,
+            tz=settings.timezone,
+            plan_reminder_at=settings.plan_reminder_time,
+            digest_at=settings.digest_time,
+        )
+        session.add(user)
+        await session.flush()
+        return user
+
+    # Telegram profilidagi o'zgarishlarni ergashtirib boramiz
+    if username is not None and user.username != username:
+        user.username = username
+    if full_name and user.full_name != full_name:
+        user.full_name = full_name
+    if user.is_blocked:
+        user.is_blocked = False
+    return user
+
+
+# ─── Kun va vazifalar ────────────────────────────────────────────────────────
+
+
+async def get_plan(session: AsyncSession, user_id: int, d: date_type) -> DailyPlan | None:
+    return await session.scalar(
+        select(DailyPlan).where(DailyPlan.user_id == user_id, DailyPlan.date == d)
+    )
+
+
+async def get_tasks(session: AsyncSession, user_id: int, d: date_type) -> list[Task]:
+    rows = await session.scalars(
+        select(Task)
+        .where(Task.user_id == user_id, Task.date == d)
+        .order_by(Task.sort_order, Task.id)
+    )
+    return list(rows)
+
+
+async def _generate_habit_tasks(
+    session: AsyncSession, user: User, d: date_type
+) -> int:
+    """Shu kunga tegishli odatlardan vazifa nusxalarini yaratadi.
+
+    Takror yaratmaydi: `UNIQUE(user_id, date, habit_id)` cheklovi bor, lekin
+    unga tayanmasdan avval mavjudlarini o'qiymiz — xato emas, oddiy holat.
+    """
+    habits = list(
+        await session.scalars(
+            select(Habit)
+            .where(Habit.user_id == user.id, Habit.is_archived.is_(False))
+            .order_by(Habit.sort_order, Habit.id)
+        )
+    )
+    if not habits:
+        return 0
+
+    existing = set(
+        await session.scalars(
+            select(Task.habit_id).where(
+                Task.user_id == user.id,
+                Task.date == d,
+                Task.habit_id.is_not(None),
+            )
+        )
+    )
+
+    created = 0
+    for habit in habits:
+        if habit.id in existing or not habit.is_active_on(d):
+            continue
+        session.add(
+            Task(
+                user_id=user.id,
+                date=d,
+                title=habit.title,
+                source=TaskSource.HABIT,
+                habit_id=habit.id,
+                points=habit.points,
+                visibility=habit.visibility,
+                sort_order=habit.sort_order,
+                status=TaskStatus.PLANNED,
+            )
+        )
+        created += 1
+
+    if created:
+        await session.flush()
+    return created
+
+
+async def open_day(
+    session: AsyncSession, user: User, d: date_type, *, generate: bool = True
+) -> tuple[DailyPlan, list[Task]]:
+    """Kunni ochadi: `DailyPlan` yaratadi va odatlardan vazifa nusxalaydi.
+
+    `generate` faqat bugun va kelajak uchun ishlaydi. O'tmish kunga odat
+    qo'shish soxta tarix yaratardi — hech qachon qilmaymiz.
+    """
+    plan = await get_plan(session, user.id, d)
+    if plan is None:
+        plan = DailyPlan(user_id=user.id, date=d)
+        session.add(plan)
+        await session.flush()
+
+    if generate and d >= clock.today_local(user.tz):
+        await _generate_habit_tasks(session, user, d)
+
+    tasks = await get_tasks(session, user.id, d)
+    await recalc_day(session, user.id, d, tasks=tasks, plan=plan)
+    return plan, tasks
+
+
+async def recalc_day(
+    session: AsyncSession,
+    user_id: int,
+    d: date_type,
+    *,
+    tasks: list[Task] | None = None,
+    plan: DailyPlan | None = None,
+) -> DailyPlan:
+    """`DailyPlan` dagi takrorlangan hisoblagichlarni yangilaydi.
+
+    Har o'zgarishdan keyin chaqiriladi. Shu tufayli statistika so'rovlari
+    `tasks` jadvalini umuman sanamaydi.
+    """
+    if plan is None:
+        plan = await get_plan(session, user_id, d)
+        if plan is None:
+            plan = DailyPlan(user_id=user_id, date=d)
+            session.add(plan)
+            await session.flush()
+    if tasks is None:
+        tasks = await get_tasks(session, user_id, d)
+
+    stats = scoring.summarize(tasks)
+    plan.planned_count = stats["planned_count"]
+    plan.done_count = stats["done_count"]
+    plan.score = stats["score"]
+    plan.completion_pct = stats["completion_pct"]
+    return plan
+
+
+async def add_task(
+    session: AsyncSession,
+    user: User,
+    d: date_type,
+    title: str,
+    *,
+    points: int = 1,
+    visibility=None,
+) -> Task:
+    title = title.strip()[:200]
+    if not title:
+        raise ValueError("Vazifa nomi bo'sh")
+
+    last_order = await session.scalar(
+        select(Task.sort_order)
+        .where(Task.user_id == user.id, Task.date == d)
+        .order_by(Task.sort_order.desc())
+        .limit(1)
+    )
+    task = Task(
+        user_id=user.id,
+        date=d,
+        title=title,
+        source=TaskSource.MANUAL,
+        points=max(1, min(points, 10)),
+        visibility=visibility,
+        sort_order=(last_order or 0) + 1,
+        status=TaskStatus.PLANNED,
+    )
+    session.add(task)
+    await session.flush()
+    await recalc_day(session, user.id, d)
+    return task
+
+
+async def delete_task(session: AsyncSession, user_id: int, task_id: int) -> bool:
+    task = await session.get(Task, task_id)
+    if task is None or task.user_id != user_id:
+        return False
+    d = task.date
+    await session.delete(task)
+    await session.flush()
+    await recalc_day(session, user_id, d)
+    return True
+
+
+async def set_status(
+    session: AsyncSession,
+    user_id: int,
+    task_id: int,
+    status: TaskStatus,
+    *,
+    reason: MissReason | None = None,
+    note: str | None = None,
+) -> Task | None:
+    task = await session.get(Task, task_id)
+    if task is None or task.user_id != user_id:
+        return None
+
+    task.status = status
+    if status == TaskStatus.DONE:
+        task.done_at = clock.now_utc()
+        # Bajarilgan vazifada eski "sabab" qolib ketmasin
+        task.miss_reason = None
+        task.miss_note = None
+    else:
+        task.done_at = None
+        if reason is not None:
+            task.miss_reason = reason
+        if note is not None:
+            task.miss_note = note.strip()[:500] or None
+
+    await session.flush()
+    await recalc_day(session, user_id, task.date)
+    return task
+
+
+async def set_miss_reason(
+    session: AsyncSession,
+    user_id: int,
+    task_id: int,
+    reason: MissReason,
+    note: str | None = None,
+) -> Task | None:
+    task = await session.get(Task, task_id)
+    if task is None or task.user_id != user_id:
+        return None
+    task.miss_reason = reason
+    if note is not None:
+        task.miss_note = note.strip()[:500] or None
+    await session.flush()
+    return task
+
+
+async def move_task(
+    session: AsyncSession, user_id: int, task_id: int, new_date: date_type
+) -> Task | None:
+    """Bajarilmagan vazifani boshqa kunga ko'chirish.
+
+    Avtomatik ko'chirish ataylab yo'q: nima ko'chishini odam o'zi hal qilsin,
+    aks holda ro'yxat cheksiz o'sib ketadi va ma'nosini yo'qotadi.
+    """
+    task = await session.get(Task, task_id)
+    if task is None or task.user_id != user_id:
+        return None
+    if task.source == TaskSource.HABIT:
+        # Odat nusxasini ko'chirish mantiqsiz — u ertaga baribir yaratiladi
+        return None
+
+    old_date = task.date
+    task.date = new_date
+    task.status = TaskStatus.PLANNED
+    task.done_at = None
+    await session.flush()
+    await recalc_day(session, user_id, old_date)
+    await recalc_day(session, user_id, new_date)
+    return task
+
+
+async def submit_plan(session: AsyncSession, user: User, d: date_type) -> DailyPlan:
+    """Rejani "kiritilgan" deb belgilaydi.
+
+    Aynan shu fakt bo'yicha sherikka "hali reja kiritmadi" xabari ketadi,
+    shuning uchun bu alohida harakat — vazifa qo'shishning o'zi yetarli emas.
+    """
+    plan, _ = await open_day(session, user, d)
+    if plan.submitted_at is None:
+        plan.submitted_at = clock.now_utc()
+    await session.flush()
+    return plan
+
+
+# ─── Kunni yopish ────────────────────────────────────────────────────────────
+
+
+async def close_day(session: AsyncSession, user: User, d: date_type) -> DailyPlan | None:
+    """Yarim tundan keyin: bajarilmaganlarni `MISSED` qiladi va kunni muhrlaydi.
+
+    Idempotent — ikkinchi marta chaqirilsa hech narsa o'zgarmaydi.
+    """
+    plan = await get_plan(session, user.id, d)
+    if plan is None:
+        return None
+    if plan.closed_at is not None:
+        return plan
+
+    tasks = await get_tasks(session, user.id, d)
+    for task in tasks:
+        if task.status == TaskStatus.PLANNED:
+            task.status = TaskStatus.MISSED
+
+    plan.closed_at = clock.now_utc()
+    await session.flush()
+    await recalc_day(session, user.id, d, tasks=tasks, plan=plan)
+    return plan
+
+
+async def missed_tasks_without_reason(
+    session: AsyncSession, user_id: int, d: date_type
+) -> list[Task]:
+    rows = await session.scalars(
+        select(Task).where(
+            Task.user_id == user_id,
+            Task.date == d,
+            Task.status == TaskStatus.MISSED,
+            Task.miss_reason.is_(None),
+        )
+    )
+    return list(rows)
+
+
+async def has_submitted_plan_for(
+    session: AsyncSession, user_id: int, d: date_type
+) -> bool:
+    plan = await get_plan(session, user_id, d)
+    return plan is not None and plan.submitted_at is not None
+
+
+async def recent_plans(
+    session: AsyncSession, user_id: int, days: int = 30, until: date_type | None = None
+) -> list[DailyPlan]:
+    until = until or clock.today_local()
+    since = until - timedelta(days=days - 1)
+    rows = await session.scalars(
+        select(DailyPlan)
+        .where(
+            DailyPlan.user_id == user_id,
+            DailyPlan.date >= since,
+            DailyPlan.date <= until,
+        )
+        .order_by(DailyPlan.date)
+    )
+    return list(rows)
