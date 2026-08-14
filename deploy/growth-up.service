@@ -1,0 +1,30 @@
+[Unit]
+Description=Duo Growth — bot + API + eslatma sikli
+# Tarmoq ko'tarilmasdan ishga tushsa, bot Telegramga ulana olmay xato beradi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/growth-up
+ExecStart=/opt/growth-up/.venv/bin/python run.py
+
+# Yiqilsa qayta ko'tariladi. Ilovaning butun ma'nosi eslatmalarda —
+# jim o'lgan jarayon eng yomon holat.
+Restart=always
+RestartSec=5
+
+# Log'lar jurnalga tushsin: `journalctl -u growth-up -f`
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+
+# Oddiy himoya: ilovaga faqat o'z papkasi yozish uchun ochiq
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/growth-up/data
+
+[Install]
+WantedBy=multi-user.target

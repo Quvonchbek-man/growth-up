@@ -1,0 +1,19 @@
+# Caddy: HTTPS sertifikatini o'zi oladi va o'zi yangilaydi.
+# Telegram Mini App faqat HTTPS'ni qabul qiladi — shuning uchun bu shart.
+#
+# DOMEN nomini o'zingiznikiga almashtiring (DuckDNS'da band qilingan nom).
+# Fayl joyi serverda: /etc/caddy/Caddyfile
+
+growth-up.duckdns.org {
+	# Ilova faqat localhost'da tinglaydi — tashqariga Caddy chiqaradi
+	reverse_proxy 127.0.0.1:8000
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/growth-up.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}
