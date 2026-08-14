@@ -15,16 +15,25 @@ ESKI=$(git rev-parse HEAD)
 git pull -q origin main
 YANGI=$(git rev-parse HEAD)
 
-if [ "$ESKI" = "$YANGI" ]; then
+# `--force`: kod allaqachon tortib olingan bo'lsa ham hammasini qayta quradi.
+# (Qo'lda `git pull` qilib, keyin shu skriptni chaqirish oson xato.)
+if [ "$ESKI" = "$YANGI" ] && [ "${1:-}" != "--force" ]; then
     echo "Yangilanish yo'q — kod allaqachon oxirgi holatda ($(git log --oneline -1))"
+    echo "Baribir qayta qurish kerak bo'lsa: $0 --force"
     exit 0
 fi
 
-echo "Yangilanish: $(git log --oneline "$ESKI..$YANGI" | wc -l) ta commit"
-git log --oneline "$ESKI..$YANGI"
-echo
+if [ "${1:-}" = "--force" ]; then
+    echo "--force: hamma narsa qayta quriladi"
+    OZGARGAN=$(git ls-files)
+fi
 
-OZGARGAN=$(git diff --name-only "$ESKI" "$YANGI")
+if [ "$ESKI" != "$YANGI" ]; then
+    echo "Yangilanish: $(git log --oneline "$ESKI..$YANGI" | wc -l) ta commit"
+    git log --oneline "$ESKI..$YANGI"
+    echo
+    OZGARGAN=$(git diff --name-only "$ESKI" "$YANGI")
+fi
 
 if echo "$OZGARGAN" | grep -q "^requirements.txt"; then
     echo "→ Python bog'liqliklari yangilanyapti"
