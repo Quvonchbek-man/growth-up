@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -37,6 +38,29 @@ engine = create_async_engine(
     echo=False,
     pool_pre_ping=True,
 )
+
+if settings.is_sqlite:
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _sqlite_pragmas(dbapi_connection, _record) -> None:
+        """Har yangi ulanishda SQLite'ni ko'p yozuvchiga moslaymiz.
+
+        Ilovada bir vaqtda uchta yozuvchi bor: bot handleri, eslatma sikli va
+        API. SQLite'ning sukut sozlamalarida (`journal_mode=delete`,
+        `busy_timeout=0`) ulardan biri bazaga tekkan payt ikkinchisi kutmasdan
+        `database is locked` xatosini oladi — foydalanuvchi uchun bu bosilgan
+        ✅ ning yo'qolishi degani, hech qanday ogohlantirishsiz.
+
+        - `WAL`: o'quvchilar yozuvchini bloklamaydi
+        - `busy_timeout`: darhol xato bermay, 5 soniya kutadi
+        - `synchronous=NORMAL`: WAL bilan xavfsiz va sezilarli tezroq
+        """
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
+
 
 session_factory = async_sessionmaker(
     engine,
