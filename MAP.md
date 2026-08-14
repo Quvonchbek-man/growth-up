@@ -62,7 +62,7 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | [models.py](shared/models.py) | **11 jadval + 9 sanoq.** Enumlar `:73-140`, `User:146`, `Group:183`, `Membership:201`, `Habit:223`, `Task:260`, `DailyPlan:320`, `StreakState:350`, `Nudge:369`, `Reaction:390`, `ReminderLog:409`, Faza 2: `Goal:436`, `JournalEntry:452` |
 | [config.py](shared/config.py) | `Settings` pydantic (`:28`), barcha `.env` kalitlari, `get_settings()` lru_cache (`:136`) |
 | [clock.py](shared/clock.py) | "Hozir" tushunchasining **yagona manbayi**: `now_utc`, `today_local`, `is_due` (`:78`), `week_start` |
-| [db.py](shared/db.py) | async engine, `session_factory`, `create_all()` |
+| [db.py](shared/db.py) | async engine, `session_factory`, `create_all()`. **SQLite PRAGMA'lari `:48`** — WAL + `busy_timeout=5s`: usiz bot, API va eslatma sikli bir vaqtda yozganda `database is locked` chiqadi |
 
 ### services/ — biznes-logika
 
@@ -185,7 +185,27 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | Jamoani boshqarish (nom, kod, a'zo chiqarish, chiqish) | `services/groups.py:153+` → `api/routers/team.py:79+` → **`web/src/pages/Settings.tsx`** (Team.tsx da emas) |
 | Jamoadan chiqish | `services/groups.py:183` → `api/routers/team.py:133` → `web/src/pages/Settings.tsx` |
 
-## 7. Ishga tushirish (qisqacha)
+## 7. Server (2026-08-14 dan beri shu yerda ishlaydi)
+
+| | |
+|---|---|
+| Manzil | <https://158.178.149.128.nip.io> |
+| Server | Oracle Cloud Always Free, Amsterdam, Ubuntu 24.04, 1 yadro / 1 GB |
+| SSH | `ssh -i ~/.ssh/growth-up ubuntu@158.178.149.128` |
+| Papka | `/opt/growth-up` (GitHub'dan `git pull`) |
+| Xizmat | `systemctl status\|restart growth-up` · log: `journalctl -u growth-up -f` |
+| HTTPS | Caddy + Let's Encrypt, sertifikat o'zi yangilanadi |
+| Zaxira | har kuni 03:00, `data/backups/`, 30 kun saqlanadi |
+
+Batafsil o'rnatish va yangilash: [deploy/SERVER.md](deploy/SERVER.md).
+
+**Domen `nip.io` — vaqtinchalik yechim:** u IP manzilni domenga aylantiradi
+(`158.178.149.128.nip.io` → o'sha IP), ro'yxatdan o'tish talab qilmaydi.
+Kamchiligi: IP o'zgarsa domen ham o'zgaradi. Doimiy nom kerak bo'lsa —
+DuckDNS yoki o'z domeningiz; o'shanda `.env` dagi `WEBAPP_URL`, Caddyfile
+va restart yetadi.
+
+## 8. Ishga tushirish (lokal, qisqacha)
 
 ```bash
 python run.py                 # bot + API + eslatma sikli
@@ -212,10 +232,10 @@ yuradi va qayta ulanadi. Tunnel qayta ishga tushsa URL o'zgaradi → `.env`
 dagi `WEBAPP_URL` ni yangilab, ilovani restart qiling (menyu tugmasi startupda
 o'rnatiladi).
 
-## 7b. Testlar
+## 9. Testlar
 
 `python -m pytest` (o'rnatish: `pip install -r requirements-dev.txt`).
-**Serverga chiqarishdan oldin majburiy.** 158 ta test, ~25 soniya.
+**Serverga chiqarishdan oldin majburiy.** 161 ta test, ~25 soniya.
 
 | Fayl | Nimani qo'riqlaydi |
 |---|---|
@@ -228,12 +248,13 @@ o'rnatiladi).
 | [test_api.py](tests/test_api.py) | Barcha endpointlar ASGI orqali (tarmoqsiz), `index.html` kesh sarlavhasi |
 | [test_auth.py](tests/test_auth.py) | **initData imzosi:** buzilgan `user_id`, begona token, muddati o'tgani rad etilishi |
 | [test_integrity.py](tests/test_integrity.py) | Har modul import bo'lishi, `T.NOM` mavjudligi, `.format()` kalitlari matnga mosligi, o'lik matnlar ro'yxati |
+| [test_db.py](tests/test_db.py) | WAL rejimi, `busy_timeout`, ikki sessiyaning parallel yozuvi |
 
 `tests/conftest.py` `os.environ` ni **import'lardan oldin** qo'yadi —
 `shared/db.py` dvigatelni import paytida yaratadi, kech qo'ysak testlar
 haqiqiy `data/growth.db` ga tegib ketardi.
 
-## 8. Holat va ochiq savollar
+## 10. Holat va ochiq savollar
 
 **Tugagan:** Faza 1 to'liq — reja, odatlar, eslatmalar, jamoa, reyting,
 statistika, maxfiylik, sardor huquqlari (nom / kod / a'zoni chiqarish),
@@ -244,8 +265,12 @@ taxmindan emas, ishlatib ko'rgandan keyin keladi — odatlarning sozlamalardan
 ajratilishi ham, chiqish tugmasi ham shundan tug'ildi. Yangi taklifni
 baholaganda: shikoyat ishonchli, unga ilova qilingan yechim — har doim emas.
 
-**Yo'q:** git repo (`git init` qilinmagan), migratsiya (Alembic),
-Faza 2 (`Goal`, `JournalEntry` jadvallari bo'sh turibdi).
+**Yo'q:** migratsiya (Alembic — model o'zgarsa baza qo'lda yangilanadi),
+Faza 2 (`Goal`, `JournalEntry` jadvallari bo'sh turibdi), CI (testlar
+qo'lda ishga tushiriladi).
+
+**Kod GitHub'da:** <https://github.com/Quvonchbek-man/growth-up> (public).
+`.env` va baza repoda yo'q va bo'lmasligi kerak.
 
 **Testlar topgan bo'shliqlar** (xato emas, ulanmagan joylar — `tests/test_integrity.py`
 dagi `ULANMAGAN_MATNLAR` ro'yxati): `STREAK_LOST` matni yozilgan, lekin streak
