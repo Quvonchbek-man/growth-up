@@ -102,14 +102,25 @@ done
 
 echo "→ Ilova ishga tushirilyapti"
 sudo systemctl start growth-up
-sleep 6
 
-if systemctl is-active --quiet growth-up; then
-    curl -sf --max-time 10 http://127.0.0.1:8000/api/health > /dev/null \
-        && echo "TAYYOR — ilova javob beryapti" \
-        || { echo "XATO: xizmat ishlayapti, lekin API javob bermayapti"; exit 1; }
-else
-    echo "XATO: xizmat ko'tarilmadi. Sabab:"
-    sudo journalctl -u growth-up -n 20 --no-pager
-    exit 1
-fi
+# Ko'tarilishini kutamiz. Bitta `sleep` yetmaydi: startupda Telegram'ga
+# menyu tugmasi o'rnatiladi va 1 GB xotirali serverda bu 15 soniyagacha
+# oladi. Qat'iy kutish qiymati "hammasi joyida, lekin XATO deb yozdi"
+# degan holatga olib keladi — bir marta shunday bo'ldi ham.
+KUTISH=60
+for ((i = 1; i <= KUTISH; i++)); do
+    if ! systemctl is-active --quiet growth-up; then
+        echo "XATO: xizmat ko'tarilmadi. Sabab:"
+        sudo journalctl -u growth-up -n 20 --no-pager
+        exit 1
+    fi
+    if curl -sf --max-time 5 http://127.0.0.1:8000/api/health > /dev/null; then
+        echo "TAYYOR — ilova javob beryapti ($i soniyada)"
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "XATO: $KUTISH soniyada API javob bermadi. Jurnal:"
+sudo journalctl -u growth-up -n 30 --no-pager
+exit 1
