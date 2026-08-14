@@ -48,6 +48,7 @@ async def _serialize(session: AsyncSession, user: User) -> dict:
         "today": clock.today_local(user.tz).isoformat(),
         "plan_reminder_at": (user.plan_reminder_at or settings.plan_reminder_time).strftime("%H:%M"),
         "digest_at": (user.digest_at or settings.digest_time).strftime("%H:%M"),
+        "task_lead_min": user.task_lead_min,
         "allow_nag_about_me": user.allow_nag_about_me,
         "notify_about_partner": user.notify_about_partner,
         "show_ranking": user.show_ranking,
@@ -73,6 +74,8 @@ async def update_me(
         user.plan_reminder_at = payload.plan_reminder_at
     if payload.digest_at is not None:
         user.digest_at = payload.digest_at
+    if payload.task_lead_min is not None:
+        user.task_lead_min = payload.task_lead_min
     if payload.allow_nag_about_me is not None:
         user.allow_nag_about_me = payload.allow_nag_about_me
     if payload.notify_about_partner is not None:

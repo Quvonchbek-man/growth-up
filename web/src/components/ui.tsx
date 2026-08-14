@@ -1,6 +1,6 @@
 /** Kichik takrorlanuvchi bo'laklar. */
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import type { Task } from "../api";
 import { haptic } from "../telegram";
@@ -61,20 +61,29 @@ const VISIBILITY_MARK: Record<string, string> = {
   private: "🙈",
 };
 
+/** "07:00–07:45" · "07:00" · "" — serverdagi `clock.fmt_range` bilan bir xil. */
+export function timeRange(task: Pick<Task, "start_time" | "end_time">): string {
+  if (!task.start_time) return "";
+  return task.end_time ? `${task.start_time}–${task.end_time}` : task.start_time;
+}
+
 export function TaskRow({
   task,
   onToggle,
   onDelete,
+  onEditTime,
   readonly = false,
 }: {
   task: Task;
   onToggle?: (task: Task) => void;
   onDelete?: (task: Task) => void;
+  onEditTime?: (task: Task) => void;
   readonly?: boolean;
 }) {
   const done = task.status === "done";
   const missed = task.status === "missed";
   const mark = VISIBILITY_MARK[task.visibility];
+  const span = timeRange(task);
 
   return (
     <div
@@ -95,12 +104,30 @@ export function TaskRow({
       </div>
 
       <span className="task__title">
+        {span && <span className="task__time">{span}</span>}
         {task.title} {mark && <span title="Maxfiylik">{mark}</span>}
       </span>
 
-      <span className="task__meta">{task.points} ball</span>
+      {/* Qo'shimcha ball bermaydi — "1 ball" yozuvi yolg'on bo'lardi */}
+      <span className="task__meta">{task.is_extra ? "qo'shimcha" : `${task.points} ball`}</span>
 
-      {onDelete && !readonly && (
+      {/* Tugmalar `readonly` ga bog'liq emas: `readonly` faqat ✅ bosishni
+          taqiqlaydi (ertangi kunni bugundan bajarib bo'lmaydi), lekin
+          vaqtni tahrirlash va o'chirish o'shanda ham kerak. */}
+      {onEditTime && (
+        <button
+          className="btn btn--small btn--ghost"
+          onClick={(event) => {
+            event.stopPropagation();
+            onEditTime(task);
+          }}
+          aria-label="Vaqtni o'zgartirish"
+        >
+          ⏱
+        </button>
+      )}
+
+      {onDelete && (
         <button
           className="btn btn--small btn--ghost"
           onClick={(event) => {
@@ -111,6 +138,149 @@ export function TaskRow({
         >
           ✕
         </button>
+      )}
+    </div>
+  );
+}
+
+/** Vazifa qatori ostida ochiladigan vaqt tahriri. */
+export function TimeEditor({
+  task,
+  onSave,
+  onCancel,
+}: {
+  task: Task;
+  onSave: (start: string, end: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [start, setStart] = useState(task.start_time ?? "");
+  const [end, setEnd] = useState(task.end_time ?? "");
+  const [busy, setBusy] = useState(false);
+
+  async function save(nextStart: string, nextEnd: string) {
+    setBusy(true);
+    try {
+      await onSave(nextStart, nextEnd);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="row row--times">
+      <input
+        type="time"
+        value={start}
+        aria-label="Boshlanish vaqti"
+        onChange={(event) => setStart(event.target.value)}
+      />
+      <span className="muted">–</span>
+      <input
+        type="time"
+        value={end}
+        aria-label="Tugash vaqti"
+        onChange={(event) => setEnd(event.target.value)}
+      />
+      <button className="btn btn--small" disabled={busy} onClick={() => void save(start, end)}>
+        Saqlash
+      </button>
+      <button
+        className="btn btn--small btn--ghost"
+        disabled={busy}
+        onClick={() => void save("", "")}
+        title="Vaqtni olib tashlash"
+      >
+        ✕
+      </button>
+      <button className="btn btn--small btn--ghost" disabled={busy} onClick={onCancel}>
+        Bekor
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Vazifa kiritish qatori — «Ertaga» va «Bugun» ekranlarida bir xil.
+ *
+ * Vaqt maydonlari ATAYLAB yashirin turadi va ⏱ bilan ochiladi: kechqurun
+ * reja kiritish eng nozik qadam, har qo'shimcha maydon reja kiritilmay
+ * qolish ehtimolini oshiradi. Vaqt kerak bo'lganda bir bosish yetadi.
+ */
+export function TaskComposer({
+  placeholder,
+  onAdd,
+  disabled = false,
+}: {
+  placeholder: string;
+  onAdd: (title: string, start: string, end: string) => Promise<void>;
+  disabled?: boolean;
+}) {
+  const [title, setTitle] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [withTime, setWithTime] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    const text = title.trim();
+    if (!text || busy || disabled) return;
+    setBusy(true);
+    try {
+      await onAdd(text, withTime ? start : "", withTime ? end : "");
+      setTitle("");
+      setStart("");
+      setEnd("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="composer">
+      <div className="row">
+        <input
+          type="text"
+          value={title}
+          placeholder={placeholder}
+          disabled={disabled}
+          onChange={(event) => setTitle(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void submit();
+          }}
+        />
+        <button
+          className={`btn btn--small${withTime ? "" : " btn--ghost"}`}
+          onClick={() => setWithTime((v) => !v)}
+          aria-label="Vaqt belgilash"
+          title="Vaqt belgilash"
+        >
+          ⏱
+        </button>
+        <button
+          className="btn"
+          onClick={() => void submit()}
+          disabled={busy || disabled || !title.trim()}
+        >
+          +
+        </button>
+      </div>
+
+      {withTime && (
+        <div className="row row--times">
+          <input
+            type="time"
+            value={start}
+            aria-label="Boshlanish vaqti"
+            onChange={(event) => setStart(event.target.value)}
+          />
+          <span className="muted">–</span>
+          <input
+            type="time"
+            value={end}
+            aria-label="Tugash vaqti"
+            onChange={(event) => setEnd(event.target.value)}
+          />
+        </div>
       )}
     </div>
   );

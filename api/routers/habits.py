@@ -24,9 +24,29 @@ def _serialize(h: Habit) -> dict:
         "weekdays_mask": h.weekdays_mask,
         "points": h.points,
         "visibility": h.visibility.value,
+        "start_time": h.start_time.isoformat("minutes") if h.start_time else None,
+        "end_time": h.end_time.isoformat("minutes") if h.end_time else None,
         "is_archived": h.is_archived,
         "sort_order": h.sort_order,
     }
+
+
+def _check_span(payload: HabitPayload) -> None:
+    """Oraliq tekshiruvi — `services/planning.py` dagi qoida bilan bir xil."""
+    if payload.end_time is not None and payload.start_time is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Tugash vaqti uchun boshlanish vaqti ham kerak",
+        )
+    if (
+        payload.start_time is not None
+        and payload.end_time is not None
+        and payload.end_time <= payload.start_time
+    ):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Tugash vaqti boshlanishidan keyin bo'lishi kerak",
+        )
 
 
 @router.get("")
@@ -48,6 +68,7 @@ async def create_habit(
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    _check_span(payload)
     last = await session.scalar(
         select(Habit.sort_order)
         .where(Habit.user_id == user.id)
@@ -62,6 +83,8 @@ async def create_habit(
         weekdays_mask=payload.weekdays_mask,
         points=payload.points,
         visibility=payload.visibility,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
         sort_order=(last or 0) + 1,
     )
     session.add(habit)
@@ -79,6 +102,7 @@ async def update_habit(
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    _check_span(payload)
     habit = await session.get(Habit, habit_id)
     if habit is None or habit.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Odat topilmadi")
@@ -89,6 +113,8 @@ async def update_habit(
     habit.weekdays_mask = payload.weekdays_mask
     habit.points = payload.points
     habit.visibility = payload.visibility
+    habit.start_time = payload.start_time
+    habit.end_time = payload.end_time
     await session.flush()
 
     # O'tmishdagi vazifalar ATAYLAB o'zgarmaydi — tarix o'zgarmas bo'lishi kerak.
@@ -106,6 +132,8 @@ async def update_habit(
         task.title = habit.title
         task.points = habit.points
         task.visibility = habit.visibility
+        task.start_time = habit.start_time
+        task.end_time = habit.end_time
         await planning.recalc_day(session, user.id, task.date)
 
     return _serialize(habit)

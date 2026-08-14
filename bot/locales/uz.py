@@ -118,6 +118,11 @@ NAG_PARTNER = (
     "Bir turtki bering — bu bir bosish, lekin ishlaydi."
 )
 
+# Vaqti belgilangan ish boshlanishidan oldin. Qisqa bo'lishi shart: kun
+# davomida keladi va uzun matn bezovta qilishga aylanadi.
+TASK_SOON = "⏰ <b>{lead} daqiqadan keyin:</b> {title}\n{range}\n\nUnutmang 🙂"
+TASK_SOON_NOW = "⏰ <b>Hozir boshlanadi:</b> {title}\n{range}"
+
 ASK_REASON_HEADER = (
     "🌙 Kecha <b>{count} ta</b> ish bajarilmadi.\n\n"
     "Har biri uchun sababni belgilang. Bu ayblov emas — bir oydan keyin "

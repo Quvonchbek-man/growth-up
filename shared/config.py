@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     # Kun yopilishi va sabab so'rash (mahalliy vaqt)
     day_close_at: str = Field(default="00:05", alias="DAY_CLOSE_AT")
     ask_reason_at: str = Field(default="00:10", alias="ASK_REASON_AT")
+    # Vaqti belgilangan vazifa boshlanishidan necha daqiqa oldin eslatiladi.
+    # Bu — yangi foydalanuvchi uchun standart; keyin har kim o'zi sozlaydi.
+    # 0 — bunday eslatmalar o'chirilgan.
+    task_reminder_lead_min: int = Field(default=10, alias="TASK_REMINDER_LEAD_MIN")
 
     # --- O'yin qoidalari ---
     # Kun "muvaffaqiyatli" hisoblanishi (streak uzilmasligi) uchun kerakli foiz.

@@ -85,6 +85,7 @@ export default function Team() {
         done={view.me.today.done_count}
         planned={view.me.today.planned_count}
         score={view.me.today.score}
+        extraDone={view.me.today.extra_done_count}
       />
 
       {view.partners.map((partner, index) => (
@@ -97,6 +98,7 @@ export default function Team() {
             planned={partner.today.planned_count}
             score={partner.today.score}
             streak={partner.streak}
+            extraDone={partner.today.extra_done_count}
           />
 
           <section className="card card--tight" style={{ marginTop: 8 }}>
@@ -272,6 +274,7 @@ function PersonCard({
   planned,
   score,
   streak,
+  extraDone = 0,
 }: {
   name: string;
   color: string;
@@ -280,6 +283,7 @@ function PersonCard({
   planned: number;
   score: number;
   streak?: number;
+  extraDone?: number;
 }) {
   return (
     <section className="card">
@@ -289,7 +293,11 @@ function PersonCard({
           <strong>{name}</strong>
         </span>
         <span className="small muted">
-          {done}/{planned} · {score} ball{streak !== undefined ? ` · 🔥 ${streak}` : ""}
+          {done}/{planned}
+          {/* Qo'shimcha foizga kirmaydi, lekin ko'rinishi kerak — sherik
+              rejadan tashqari ish qilganini bilmasa, adolatsiz tuyuladi */}
+          {extraDone > 0 && <> +{extraDone}</>} · {score} ball
+          {streak !== undefined ? ` · 🔥 ${streak}` : ""}
         </span>
       </div>
       <ProgressBar pct={pct} />

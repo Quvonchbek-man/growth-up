@@ -67,6 +67,9 @@ def serialize_task(task: Task, *, owner: bool) -> dict:
         "habit_id": task.habit_id,
         "points": task.points,
         "visibility": vis.value,
+        "start_time": task.start_time.isoformat("minutes") if task.start_time else None,
+        "end_time": task.end_time.isoformat("minutes") if task.end_time else None,
+        "is_extra": task.is_extra,
         "miss_reason": task.miss_reason.value if task.miss_reason else None,
         "miss_note": task.miss_note if owner else None,
         "done_at": task.done_at.isoformat() if task.done_at else None,
@@ -181,6 +184,9 @@ async def reason_breakdown(
             Task.date >= since,
             Task.date <= today,
             Task.status == TaskStatus.MISSED,
+            # Qo'shimchadan sabab so'ralmaydi — u yerda hammasi "noma'lum"
+            # bo'lib chiqib, eng qimmatli grafikni ma'nosiz qilardi.
+            Task.is_extra.is_(False),
         )
         .group_by(Task.miss_reason)
     )
@@ -262,6 +268,11 @@ async def leaderboard(
 
     PRIVATE vazifalar hisobga KIRMAYDI — yashirin ish jamoa reytingida
     ball bermaydi. Bu maxfiylikning narxi va qoida oldindan aytiladi.
+
+    Qo'shimchalar ham KIRMAYDI. Reyting `daily_plans` dan emas, `tasks` dan
+    to'g'ridan-to'g'ri hisoblanadi — ya'ni `scoring.py` dagi ajratma bu
+    yerga o'z-o'zidan yetib kelmaydi va filtr qo'lda yozilishi shart.
+    Bo'lmasa qo'shimcha ball bermasa ham reytingga sizib o'tadi.
     """
     if not users:
         return []
@@ -278,6 +289,7 @@ async def leaderboard(
             Task.date >= since,
             Task.date <= until,
             Task.status == TaskStatus.DONE,
+            Task.is_extra.is_(False),
             # Habit'dan yaratilgan vazifada visibility har doim to'ldirilgan,
             # qo'l vazifasida NULL bo'lishi mumkin — u PUBLIC degani.
             (Task.visibility.is_(None)) | (Task.visibility != Visibility.PRIVATE),

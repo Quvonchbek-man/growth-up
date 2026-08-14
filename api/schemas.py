@@ -18,6 +18,10 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     points: int = Field(default=1, ge=1, le=10)
     visibility: Visibility | None = None
+    # Kun ichidagi oraliq. Ikkalasi ham ixtiyoriy; tugash vaqti yolg'iz
+    # kelolmaydi (tekshiruv `services/planning.py` da).
+    start_time: time | None = None
+    end_time: time | None = None
 
 
 class TaskStatusUpdate(BaseModel):
@@ -30,6 +34,13 @@ class TaskMove(BaseModel):
     date: date
 
 
+class TaskTime(BaseModel):
+    """Mavjud vazifaning oralig'i. Ikkalasi ham `None` — vaqtni olib tashlash."""
+
+    start_time: time | None = None
+    end_time: time | None = None
+
+
 class HabitPayload(BaseModel):
     title: str = Field(min_length=1, max_length=128)
     icon: str = Field(default="✅", max_length=8)
@@ -38,6 +49,8 @@ class HabitPayload(BaseModel):
     weekdays_mask: int = Field(default=127, ge=1, le=127)
     points: int = Field(default=1, ge=1, le=10)
     visibility: Visibility = Visibility.PUBLIC
+    start_time: time | None = None
+    end_time: time | None = None
 
 
 class JoinPayload(BaseModel):
@@ -62,6 +75,9 @@ class ReactionPayload(BaseModel):
 class SettingsPayload(BaseModel):
     plan_reminder_at: time | None = None
     digest_at: time | None = None
+    # 0 — vazifa eslatmalari o'chirilgan. Yuqori chegara: 2 soat oldin
+    # eslatishning ma'nosi qolmaydi.
+    task_lead_min: int | None = Field(default=None, ge=0, le=120)
     allow_nag_about_me: bool | None = None
     notify_about_partner: bool | None = None
     show_ranking: bool | None = None

@@ -120,7 +120,7 @@ async def test_begona_vazifaga_tegib_bolmaydi(session, make_user):
 
     assert await planning.set_status(session, begona.id, task.id, TaskStatus.DONE) is None
     assert await planning.delete_task(session, begona.id, task.id) is False
-    assert await planning.move_task(session, begona.id, task.id, today) is None
+    assert await planning.move_task(session, begona, task.id, today) is None
 
 
 async def test_belgilash_hisoblagichlarni_yangilaydi(session, make_user, make_habit):
@@ -168,7 +168,7 @@ async def test_odat_nusxasini_kochirib_bolmaydi(session, make_user, make_habit):
     today = clock.today_local(user.tz)
     _, tasks = await planning.open_day(session, user, today)
 
-    natija = await planning.move_task(session, user.id, tasks[0].id, today + timedelta(days=1))
+    natija = await planning.move_task(session, user, tasks[0].id, today + timedelta(days=1))
     assert natija is None
 
 
@@ -179,7 +179,7 @@ async def test_qol_vazifasi_kochadi(session, make_user):
     task = await planning.add_task(session, user, today, "Ko'chadigan ish")
     await planning.set_status(session, user.id, task.id, TaskStatus.DONE)
 
-    moved = await planning.move_task(session, user.id, task.id, ertaga)
+    moved = await planning.move_task(session, user, task.id, ertaga)
     assert moved.date == ertaga
     assert moved.status == TaskStatus.PLANNED, "ko'chgach qaytadan bajarilmagan bo'ladi"
 

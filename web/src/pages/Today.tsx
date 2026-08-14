@@ -1,7 +1,15 @@
 import { api, type DayView, type Me, type Task } from "../api";
-import { Card, ErrorBox, Loading, ProgressBar, TaskRow, Tiles } from "../components/ui";
+import {
+  Card,
+  ErrorBox,
+  Loading,
+  ProgressBar,
+  TaskComposer,
+  TaskRow,
+  Tiles,
+} from "../components/ui";
 import { useAsync, useRoute } from "../hooks";
-import { notify } from "../telegram";
+import { alertUser, notify } from "../telegram";
 
 export default function Today() {
   const day = useAsync<DayView>(() => api.day("today"), []);
@@ -17,6 +25,12 @@ export default function Today() {
   if (!day.data) return null;
 
   const view = day.data;
+  // Reja — kechqurun berilgan va'da, qo'shimcha — kun ichida qo'shilgani.
+  // Ular ataylab alohida ro'yxatda: aralashtirilsa "bu ish rejada bormidi"
+  // degan savolga javob yo'qoladi va foizning nega o'zgarmagani tushunarsiz
+  // bo'lib qoladi.
+  const plan = view.tasks.filter((t) => !t.is_extra);
+  const extras = view.tasks.filter((t) => t.is_extra);
 
   async function toggle(task: Task) {
     const next = task.status === "done" ? "planned" : "done";
@@ -26,6 +40,25 @@ export default function Today() {
       if (next === "done") notify("success");
     } catch {
       notify("error");
+      day.reload();
+    }
+  }
+
+  async function addExtra(title: string, start: string, end: string) {
+    try {
+      day.setData(await api.addTask("today", title, { start_time: start, end_time: end }));
+      notify("success");
+    } catch (error) {
+      notify("error");
+      alertUser(error instanceof Error ? error.message : "Qo'shib bo'lmadi");
+    }
+  }
+
+  async function removeExtra(task: Task) {
+    try {
+      await api.deleteTask(task.id);
+      day.setData(await api.day("today"));
+    } catch {
       day.reload();
     }
   }
@@ -68,7 +101,7 @@ export default function Today() {
         <ProgressBar pct={view.completion_pct} />
       </Card>
 
-      {view.tasks.length === 0 ? (
+      {plan.length === 0 ? (
         <Card>
           <p className="empty">
             Bugunga reja yo'q.
@@ -81,14 +114,55 @@ export default function Today() {
           </button>
         </Card>
       ) : (
-        <section className="card card--tight">
-          {view.tasks.map((task) => (
-            <TaskRow key={task.id} task={task} onToggle={toggle} readonly={view.closed} />
-          ))}
-        </section>
+        <>
+          <h2 className="section">Reja</h2>
+          <section className="card card--tight">
+            {plan.map((task) => (
+              <TaskRow key={task.id} task={task} onToggle={toggle} readonly={view.closed} />
+            ))}
+          </section>
+        </>
       )}
 
-      {!view.closed && view.tasks.length > 0 && (
+      {/* Qo'shimcha bo'limi. Kun yopilgach faqat ro'yxat qoladi. */}
+      {(extras.length > 0 || !view.closed) && (
+        <>
+          <h2 className="section">
+            Qo'shimcha
+            {extras.length > 0 && (
+              <span className="section__meta">
+                {view.extra_done_count} / {view.extra_count}
+              </span>
+            )}
+          </h2>
+
+          {extras.length > 0 && (
+            <section className="card card--tight">
+              {extras.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  onToggle={toggle}
+                  onDelete={view.closed ? undefined : removeExtra}
+                  readonly={view.closed}
+                />
+              ))}
+            </section>
+          )}
+
+          {!view.closed && (
+            <Card>
+              <TaskComposer placeholder="Bugun yana nima chiqdi?" onAdd={addExtra} />
+              <p className="small muted" style={{ marginTop: 8 }}>
+                Qo'shimcha foizga ham, ballga ham kirmaydi — reja kechqurun
+                berilgan va'da, bu esa uning ustiga qilgan ishingiz.
+              </p>
+            </Card>
+          )}
+        </>
+      )}
+
+      {!view.closed && plan.length > 0 && (
         <button className="btn btn--ghost btn--block" onClick={() => navigate("tomorrow")}>
           🌙 Ertangi rejani tayyorlash
         </button>

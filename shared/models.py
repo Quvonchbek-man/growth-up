@@ -126,6 +126,7 @@ class ReminderKind(str, enum.Enum):
     DIGEST = "digest"          # ertalab: bugungi reja
     DAY_CLOSE = "close"        # yarim tun: kunni yopish (tizim ishi)
     ASK_REASON = "reason"      # bajarilmaganlar bo'yicha sabab so'rash
+    TASK_SOON = "task_soon"    # kun ichida: falon vazifa boshlanay deb qoldi
     WEEKLY_REPORT = "weekly"   # Faza 2
 
 
@@ -156,6 +157,9 @@ class User(Base, TimestampMixin):
     # --- Eslatma sozlamalari (mahalliy vaqt) ---
     plan_reminder_at: Mapped[time_type | None] = mapped_column(Time)
     digest_at: Mapped[time_type | None] = mapped_column(Time)
+    # Vaqti belgilangan vazifa boshlanishidan necha daqiqa oldin eslatilsin.
+    # 0 — bunday eslatmalar umuman yuborilmaydi.
+    task_lead_min: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
 
     # "Men ertangi rejani kiritmasam, sherigimga xabar ketsin"
     allow_nag_about_me: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -237,6 +241,11 @@ class Habit(Base, TimestampMixin):
     )
     weekdays_mask: Mapped[int] = mapped_column(Integer, default=ALL_WEEKDAYS)
 
+    # Kun ichidagi oraliq — MAHALLIY vaqt (`date` maydonlari bilan bir mantiqda).
+    # Ikkalasi ham ixtiyoriy: vaqtsiz odat kun bo'yi bajarilishi mumkin.
+    start_time: Mapped[time_type | None] = mapped_column(Time)
+    end_time: Mapped[time_type | None] = mapped_column(Time)
+
     # Ball og'irligi: sport 3, kitob 2, suv 1 — o'zingiz belgilaysiz
     points: Mapped[int] = mapped_column(Integer, default=1)
     visibility: Mapped[Visibility] = mapped_column(
@@ -289,6 +298,17 @@ class Task(Base, TimestampMixin):
         Integer, ForeignKey("goals.id", ondelete="SET NULL")
     )
 
+    # Odatdan meros oladi yoki qo'lda kiritiladi. Mahalliy vaqt.
+    start_time: Mapped[time_type | None] = mapped_column(Time)
+    end_time: Mapped[time_type | None] = mapped_column(Time)
+
+    # Kun boshlangandan keyin qo'shilgan ish. Reja EMAS — va'da kechqurun
+    # berilgan, bu esa ustiga chiqqani. Shuning uchun na foizga, na ballga,
+    # na streakka kiradi (`services/scoring.py`).
+    is_extra: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+
     status: Mapped[TaskStatus] = mapped_column(
         _enum(TaskStatus), default=TaskStatus.PLANNED
     )
@@ -313,7 +333,9 @@ class Task(Base, TimestampMixin):
 
     @property
     def counts_for_score(self) -> bool:
-        """SKIPPED vazifa na foizga, na ballga kiradi."""
+        """SKIPPED va qo'shimcha vazifa na foizga, na ballga kiradi."""
+        if self.is_extra:
+            return False
         return self.status in (TaskStatus.DONE, TaskStatus.MISSED, TaskStatus.PLANNED)
 
 
@@ -341,10 +363,18 @@ class DailyPlan(Base, TimestampMixin):
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Quyidagi to'rttasi FAQAT rejadan hisoblanadi — qo'shimchalar kirmaydi.
+    # Streak ham shu `completion_pct` ni o'qiydi (`services/streak.py`).
     planned_count: Mapped[int] = mapped_column(Integer, default=0)
     done_count: Mapped[int] = mapped_column(Integer, default=0)
     score: Mapped[int] = mapped_column(Integer, default=0)
     completion_pct: Mapped[int] = mapped_column(Integer, default=0)  # 0..100
+
+    # Qo'shimchalar alohida sanaladi: ko'rsatiladi, lekin hech qayerga qo'shilmaydi
+    extra_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    extra_done_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
 
 
 class StreakState(Base):
@@ -412,11 +442,14 @@ class ReminderLog(Base):
     Bot kuniga bir necha marta qayta ishga tushishi mumkin. Shu jadval
     bo'lmasa, foydalanuvchi har restartda o'sha eslatmani qayta oladi va
     bir haftada botni bloklaydi.
+
+    `task_id` — vazifa eslatmasi uchun: bir kunda bir necha vazifa bo'ladi,
+    har biriga alohida yozuv kerak. Kunlik eslatmalarda `0` turadi.
     """
 
     __tablename__ = "reminder_log"
     __table_args__ = (
-        UniqueConstraint("user_id", "kind", "date", name="uq_reminder_once"),
+        UniqueConstraint("user_id", "kind", "date", "task_id", name="uq_reminder_once"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -425,6 +458,12 @@ class ReminderLog(Base):
     )
     kind: Mapped[ReminderKind] = mapped_column(_enum(ReminderKind), nullable=False)
     date: Mapped[date_type] = mapped_column(Date, nullable=False)
+    # NULL EMAS, standarti 0. SQLite `UNIQUE` da NULL'lar bir-biridan farqli
+    # hisoblanadi — nullable qilinsa kunlik eslatmalarning "bir marta"
+    # kafolati jimgina yo'qoladi va har restart xabarni qayta yuboradi.
+    task_id: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

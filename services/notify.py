@@ -70,22 +70,32 @@ async def safe_send(
 
 
 async def already_sent(
-    session: AsyncSession, user_id: int, kind: ReminderKind, d: date_type
+    session: AsyncSession,
+    user_id: int,
+    kind: ReminderKind,
+    d: date_type,
+    task_id: int = 0,
 ) -> bool:
+    """`task_id` — vazifa eslatmalari uchun. Kunlik turlarida doim `0`."""
     row = await session.scalar(
         select(ReminderLog.id).where(
             ReminderLog.user_id == user_id,
             ReminderLog.kind == kind,
             ReminderLog.date == d,
+            ReminderLog.task_id == task_id,
         )
     )
     return row is not None
 
 
 async def mark_sent(
-    session: AsyncSession, user_id: int, kind: ReminderKind, d: date_type
+    session: AsyncSession,
+    user_id: int,
+    kind: ReminderKind,
+    d: date_type,
+    task_id: int = 0,
 ) -> None:
-    session.add(ReminderLog(user_id=user_id, kind=kind, date=d))
+    session.add(ReminderLog(user_id=user_id, kind=kind, date=d, task_id=task_id))
     await session.flush()
 
 
@@ -120,13 +130,73 @@ async def send_digest(bot: Bot, session: AsyncSession, user: User) -> bool:
         lines = [T.DIGEST_HEADER.format(count=len(active))]
         for t in active:
             mark = "✅" if t.status == TaskStatus.DONE else "⬜"
-            lines.append(f"{mark} {t.title}")
+            span = clock.fmt_range(t.start_time, t.end_time)
+            lines.append(f"{mark} {span} {t.title}" if span else f"{mark} {t.title}")
         lines.append(T.DIGEST_FOOTER)
         sent = await safe_send(
             bot, session, user, "\n".join(lines), kb.day_tasks(active)
         )
 
     await mark_sent(session, user.id, ReminderKind.DIGEST, today)
+    return sent
+
+
+async def send_task_reminders(
+    bot: Bot, session: AsyncSession, user: User, *, force: bool = False
+) -> int:
+    """Boshlanishiga oz qolgan vazifalar haqida eslatadi.
+
+    Kunlik eslatmalardan farqi: bittasi emas, bir kunda bir nechtasi ketadi.
+    Shuning uchun takrorlanmaslik `ReminderLog.task_id` bo'yicha hisoblanadi.
+
+    `force` (admin `/sinov`) — vaqtga qaramay, lekin faqat eng yaqin 3 tasi:
+    kunning hamma vazifasi ketma-ket kelsa sinov o'zi bezovtalikka aylanadi.
+    """
+    lead = user.task_lead_min
+    if lead <= 0 and not force:
+        return 0
+
+    today = clock.today_local(user.tz)
+    rows = await session.scalars(
+        select(Task)
+        .where(
+            Task.user_id == user.id,
+            Task.date == today,
+            Task.status == TaskStatus.PLANNED,
+            Task.start_time.is_not(None),
+        )
+        .order_by(Task.start_time)
+    )
+    tasks = list(rows)
+    if force:
+        tasks = tasks[:3]
+
+    sent = 0
+    for task in tasks:
+        if not force and not clock.is_due(
+            clock.shift_time(task.start_time, -lead), user.tz
+        ):
+            continue
+        if await already_sent(
+            session, user.id, ReminderKind.TASK_SOON, today, task_id=task.id
+        ):
+            continue
+
+        span = clock.fmt_range(task.start_time, task.end_time)
+        # Ataylab ikkita alohida `T.X.format(...)` chaqiruvi: `tests/
+        # test_integrity.py` shablon kalitlarini faqat shu shaklda ko'radi.
+        # O'zgaruvchi orqali chaqirilsa, yetishmagan `{kalit}` faqat
+        # ishlab chiqarishda, xabar yuborilmay qolganda bilinardi.
+        if lead <= 0:
+            text = T.TASK_SOON_NOW.format(title=task.title, range=span)
+        else:
+            text = T.TASK_SOON.format(lead=lead, title=task.title, range=span)
+        ok = await safe_send(bot, session, user, text, kb.day_tasks([task]))
+        await mark_sent(
+            session, user.id, ReminderKind.TASK_SOON, today, task_id=task.id
+        )
+        sent += int(ok)
+
     return sent
 
 

@@ -8,6 +8,9 @@ qurish shart bo'lmaydi, va bot restart bo'lganda tiklanadigan holat yo'q.
 Kechikkan eslatma ham yuboriladi (`clock.is_due` oynasi 10 daqiqa): kompyuter
 uxlab qolgan bo'lishi mumkin. Takrorlanmasligini `ReminderLog` kafolatlaydi.
 
+Beshta eslatma kunning belgilangan vaqtlarida ishlaydi, oltinchisi —
+vazifa eslatmasi — kun ichida, har vazifaning o'z vaqtida.
+
 **Har foydalanuvchi alohida sessiyada** ishlanadi: bittasida xato chiqsa,
 qolganlarning eslatmasi yo'qolmasin.
 """
@@ -57,6 +60,12 @@ async def fire_due_for(bot: Bot, user: User, session, *, force: bool = False) ->
         result = await fn(bot, session, user)
         if result:
             fired.append(name)
+
+    # Oltinchi qadam alohida turadi: yuqoridagilar kun chegarasidagi bitta
+    # belgilangan vaqtda ishlaydi, bu esa kun ichida va har vazifa uchun
+    # o'z vaqtida — tekshiruv `notify` ichida.
+    if await notify.send_task_reminders(bot, session, user, force=force):
+        fired.append("vazifa")
 
     return fired
 

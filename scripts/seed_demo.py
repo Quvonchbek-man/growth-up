@@ -20,7 +20,7 @@ from __future__ import annotations
 import asyncio
 import random
 import sys
-from datetime import timedelta
+from datetime import time, timedelta
 
 from sqlalchemy import delete, select
 
@@ -49,21 +49,23 @@ DEMO_PARTNER_ID = 900_000_000_001
 DAYS = 30
 SEED = 20260813  # takrorlanadigan natija uchun
 
+# Vaqt ataylab hammasiga qo'yilmagan: kun jadval bo'lib ham, ro'yxat bo'lib
+# ham ko'rinishi kerak — ikkala holat ham namunada bo'lsin.
 MY_HABITS = [
-    # (nom, ikonka, ball, ko'rinish, jadval, bajarilish ehtimoli)
-    ("Ertalabki sport", "🏃", 3, Visibility.PUBLIC, ScheduleKind.DAILY, 0.62),
-    ("30 daqiqa kitob", "📚", 2, Visibility.PUBLIC, ScheduleKind.DAILY, 0.80),
-    ("Ingliz tili", "🇬🇧", 2, Visibility.PUBLIC, ScheduleKind.WEEKDAYS, 0.70),
-    ("2 litr suv", "💧", 1, Visibility.PUBLIC, ScheduleKind.DAILY, 0.88),
-    ("Erta yotish", "🌙", 2, Visibility.STATS_ONLY, ScheduleKind.DAILY, 0.55),
-    ("Meditatsiya", "🧘", 1, Visibility.PRIVATE, ScheduleKind.DAILY, 0.45),
+    # (nom, ikonka, ball, ko'rinish, jadval, bajarilish ehtimoli, boshlanish, tugash)
+    ("Ertalabki sport", "🏃", 3, Visibility.PUBLIC, ScheduleKind.DAILY, 0.62, time(7, 0), time(7, 45)),
+    ("30 daqiqa kitob", "📚", 2, Visibility.PUBLIC, ScheduleKind.DAILY, 0.80, time(21, 30), time(22, 0)),
+    ("Ingliz tili", "🇬🇧", 2, Visibility.PUBLIC, ScheduleKind.WEEKDAYS, 0.70, time(19, 0), time(20, 0)),
+    ("2 litr suv", "💧", 1, Visibility.PUBLIC, ScheduleKind.DAILY, 0.88, None, None),
+    ("Erta yotish", "🌙", 2, Visibility.STATS_ONLY, ScheduleKind.DAILY, 0.55, time(23, 0), None),
+    ("Meditatsiya", "🧘", 1, Visibility.PRIVATE, ScheduleKind.DAILY, 0.45, None, None),
 ]
 
 PARTNER_HABITS = [
-    ("Yugurish", "🏃", 3, Visibility.PUBLIC, ScheduleKind.WEEKDAYS, 0.58),
-    ("Kitob o'qish", "📚", 2, Visibility.PUBLIC, ScheduleKind.DAILY, 0.72),
-    ("Kurs darslari", "💻", 3, Visibility.PUBLIC, ScheduleKind.DAILY, 0.66),
-    ("Suv rejimi", "💧", 1, Visibility.PUBLIC, ScheduleKind.DAILY, 0.90),
+    ("Yugurish", "🏃", 3, Visibility.PUBLIC, ScheduleKind.WEEKDAYS, 0.58, time(6, 30), time(7, 15)),
+    ("Kitob o'qish", "📚", 2, Visibility.PUBLIC, ScheduleKind.DAILY, 0.72, None, None),
+    ("Kurs darslari", "💻", 3, Visibility.PUBLIC, ScheduleKind.DAILY, 0.66, time(20, 0), time(21, 30)),
+    ("Suv rejimi", "💧", 1, Visibility.PUBLIC, ScheduleKind.DAILY, 0.90, None, None),
 ]
 
 MANUAL_POOL = [
@@ -74,6 +76,15 @@ MANUAL_POOL = [
     "Do'st bilan uchrashuv",
     "Uy tozalash",
     "Byudjetni yangilash",
+]
+
+# Ertalab kutilmaganda chiqadigan ishlar — «Qo'shimcha» bo'limi uchun
+EXTRA_POOL = [
+    "Ustozga qo'ng'iroq",
+    "Shoshilinch xat",
+    "Dorixonaga kirish",
+    "Mashinani yuvdirish",
+    "Hamkasbga yordam",
 ]
 
 # Sabablar taqsimoti — "vaqt yetmadi" ataylab ustun
@@ -107,7 +118,7 @@ async def _wipe(session, user_ids: list[int]) -> None:
 
 async def _make_habits(session, user: User, specs) -> list[tuple[Habit, float]]:
     out = []
-    for order, (title, icon, points, vis, kind, prob) in enumerate(specs):
+    for order, (title, icon, points, vis, kind, prob, start, end) in enumerate(specs):
         habit = Habit(
             user_id=user.id,
             title=title,
@@ -117,6 +128,8 @@ async def _make_habits(session, user: User, specs) -> list[tuple[Habit, float]]:
             schedule_kind=kind,
             # WEEKDAYS bo'lsa dushanba–juma
             weekdays_mask=0b0011111 if kind == ScheduleKind.WEEKDAYS else 0b1111111,
+            start_time=start,
+            end_time=end,
             sort_order=order,
         )
         session.add(habit)
@@ -163,6 +176,8 @@ async def _fill_history(session, user: User, habits, rnd: random.Random) -> None
                 points=habit.points,
                 visibility=habit.visibility,
                 sort_order=habit.sort_order,
+                start_time=habit.start_time,
+                end_time=habit.end_time,
                 status=TaskStatus.DONE if done else TaskStatus.MISSED,
             )
             if done:
@@ -191,6 +206,24 @@ async def _fill_history(session, user: User, habits, rnd: random.Random) -> None
                 task.miss_reason = _pick_reason(rnd)
             session.add(task)
             created.append(task)
+
+        # Kun ichida chiqib qolgan qo'shimcha ishlar. Hisobga kirmaydi —
+        # namunada aynan shu ko'rinishi kerak: bajarilgan, lekin foizni
+        # ko'tarmagan qatorlar.
+        for _ in range(rnd.choice([0, 0, 1, 1, 2])):
+            qoshimcha = Task(
+                user_id=user.id,
+                date=d,
+                title=rnd.choice(EXTRA_POOL),
+                source=TaskSource.MANUAL,
+                points=1,
+                is_extra=True,
+                status=TaskStatus.DONE if rnd.random() < 0.75 else TaskStatus.MISSED,
+            )
+            if qoshimcha.status == TaskStatus.DONE:
+                qoshimcha.done_at = clock.now_utc() - timedelta(days=(today - d).days)
+            session.add(qoshimcha)
+            created.append(qoshimcha)
 
         await session.flush()
 

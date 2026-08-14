@@ -67,6 +67,11 @@ export interface Task {
   habit_id: number | null;
   points: number;
   visibility: Visibility;
+  /** "07:00" yoki null */
+  start_time: string | null;
+  end_time: string | null;
+  /** Kun ichida qo'shilgan. Foizga ham, ballga ham kirmaydi. */
+  is_extra: boolean;
   miss_reason: string | null;
   miss_note: string | null;
   done_at: string | null;
@@ -77,11 +82,15 @@ export interface DayView {
   submitted: boolean;
   closed: boolean;
   tasks: Task[];
+  /** Quyidagi beshtasi FAQAT rejadan — qo'shimchalar kirmaydi */
   planned_count: number;
   done_count: number;
   score: number;
   max_score: number;
   completion_pct: number;
+  /** Qo'shimchalar alohida sanaladi */
+  extra_count: number;
+  extra_done_count: number;
   streak?: number;
   best_streak?: number;
 }
@@ -94,6 +103,8 @@ export interface Habit {
   weekdays_mask: number;
   points: number;
   visibility: Visibility;
+  start_time: string | null;
+  end_time: string | null;
   is_archived: boolean;
   sort_order: number;
 }
@@ -116,6 +127,8 @@ export interface Me {
   today: string;
   plan_reminder_at: string;
   digest_at: string;
+  /** Vazifa boshlanishidan necha daqiqa oldin eslatilsin. 0 = o'chirilgan */
+  task_lead_min: number;
   allow_nag_about_me: boolean;
   notify_about_partner: boolean;
   show_ranking: boolean;
@@ -189,11 +202,26 @@ export const api = {
   updateMe: (body: Partial<Me>) => patch<Me>("/me", body),
 
   day: (day: string) => get<DayView>(`/day/${day}`),
-  addTask: (day: string, title: string, points = 1, visibility?: Visibility) =>
-    post<DayView>(`/day/${day}/tasks`, { title, points, visibility }),
+  addTask: (
+    day: string,
+    title: string,
+    opts: { points?: number; visibility?: Visibility; start_time?: string | null; end_time?: string | null } = {},
+  ) =>
+    post<DayView>(`/day/${day}/tasks`, {
+      title,
+      points: opts.points ?? 1,
+      visibility: opts.visibility,
+      start_time: opts.start_time || null,
+      end_time: opts.end_time || null,
+    }),
   submitDay: (day: string) => post<DayView>(`/day/${day}/submit`),
   setStatus: (taskId: number, status: TaskStatus, reason?: string) =>
     patch<DayView>(`/tasks/${taskId}`, { status, reason }),
+  setTaskTime: (taskId: number, startTime: string | null, endTime: string | null) =>
+    post<DayView>(`/tasks/${taskId}/time`, {
+      start_time: startTime || null,
+      end_time: endTime || null,
+    }),
   moveTask: (taskId: number, date: string) =>
     post<DayView>(`/tasks/${taskId}/move`, { date }),
   deleteTask: (taskId: number) => del<{ ok: boolean }>(`/tasks/${taskId}`),

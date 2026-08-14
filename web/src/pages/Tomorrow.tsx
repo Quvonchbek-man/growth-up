@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 
 import { api, type DayView, type Task } from "../api";
-import { Card, ErrorBox, Loading, TaskRow } from "../components/ui";
+import { Card, ErrorBox, Loading, TaskComposer, TaskRow, TimeEditor } from "../components/ui";
 import { useAsync } from "../hooks";
 import { alertUser, inTelegram, notify, showMainButton } from "../telegram";
 
 export default function Tomorrow() {
   const day = useAsync<DayView>(() => api.day("tomorrow"), []);
-  const [title, setTitle] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<number | null>(null);
 
   const view = day.data;
   const submitted = view?.submitted ?? false;
@@ -26,17 +25,11 @@ export default function Tomorrow() {
   if (day.error) return <ErrorBox message={day.error} onRetry={day.reload} />;
   if (!view) return null;
 
-  async function addTask() {
-    const text = title.trim();
-    if (!text || busy) return;
-    setBusy(true);
+  async function addTask(title: string, start: string, end: string) {
     try {
-      day.setData(await api.addTask("tomorrow", text));
-      setTitle("");
+      day.setData(await api.addTask("tomorrow", title, { start_time: start, end_time: end }));
     } catch (error) {
       alertUser(error instanceof Error ? error.message : "Qo'shib bo'lmadi");
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -46,6 +39,15 @@ export default function Tomorrow() {
       day.setData(await api.day("tomorrow"));
     } catch {
       day.reload();
+    }
+  }
+
+  async function saveTime(task: Task, start: string, end: string) {
+    try {
+      day.setData(await api.setTaskTime(task.id, start, end));
+      setEditing(null);
+    } catch (error) {
+      alertUser(error instanceof Error ? error.message : "Vaqtni saqlab bo'lmadi");
     }
   }
 
@@ -82,31 +84,30 @@ export default function Tomorrow() {
           <p className="empty">Hali vazifa yo'q. Odatlar avtomatik qo'shiladi.</p>
         ) : (
           view.tasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              readonly
-              onDelete={task.source === "manual" ? removeTask : undefined}
-            />
+            <div key={task.id}>
+              <TaskRow
+                task={task}
+                readonly
+                onEditTime={() => setEditing(editing === task.id ? null : task.id)}
+                onDelete={task.source === "manual" ? removeTask : undefined}
+              />
+              {editing === task.id && (
+                <TimeEditor
+                  task={task}
+                  onSave={(start, end) => saveTime(task, start, end)}
+                  onCancel={() => setEditing(null)}
+                />
+              )}
+            </div>
           ))
         )}
       </section>
 
       <Card title="Qo'shimcha vazifa">
-        <div className="row">
-          <input
-            type="text"
-            value={title}
-            placeholder="Masalan: hisobotni tugatish"
-            onChange={(event) => setTitle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void addTask();
-            }}
-          />
-          <button className="btn" onClick={() => void addTask()} disabled={busy || !title.trim()}>
-            +
-          </button>
-        </div>
+        <TaskComposer placeholder="Masalan: hisobotni tugatish" onAdd={addTask} />
+        <p className="small muted" style={{ marginTop: 8 }}>
+          ⏱ bilan vaqt belgilasangiz, boshlanishidan oldin eslatma keladi.
+        </p>
       </Card>
 
       {/* Telegram'dan tashqarida MainButton yo'q — oddiy tugma kerak */}

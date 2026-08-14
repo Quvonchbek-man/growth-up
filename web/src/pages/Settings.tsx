@@ -145,13 +145,33 @@ export default function Settings({ onClose }: { onClose: () => void }) {
                 onChange={(event) => void save({ plan_reminder_at: event.target.value })}
               />
             </label>
-            <label className="row row--between">
+            <label className="row row--between" style={{ marginBottom: 12 }}>
               <span>☀️ Ertalabki ro'yxat</span>
               <input
                 type="time"
                 style={{ width: 130 }}
                 value={profile.digest_at}
                 onChange={(event) => void save({ digest_at: event.target.value })}
+              />
+            </label>
+            <label className="row row--between">
+              <span className="spread">
+                ⏰ Vazifadan oldin
+                <div className="small muted">
+                  Vaqti belgilangan ish boshlanishidan necha daqiqa oldin
+                  eslatilsin. 0 — o'chirilgan.
+                </div>
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={120}
+                step={5}
+                style={{ width: 80 }}
+                value={profile.task_lead_min}
+                onChange={(event) =>
+                  void save({ task_lead_min: Number(event.target.value) })
+                }
               />
             </label>
           </Card>

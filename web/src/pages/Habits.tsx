@@ -20,6 +20,8 @@ const EMPTY_HABIT: Partial<Habit> = {
   visibility: "public",
   schedule_kind: "daily",
   weekdays_mask: 127,
+  start_time: null,
+  end_time: null,
 };
 
 /**
@@ -128,6 +130,11 @@ export default function Habits() {
           <div className="task" key={habit.id} style={{ cursor: "default" }}>
             <span style={{ fontSize: 19 }}>{habit.icon}</span>
             <span className="task__title">
+              {habit.start_time && (
+                <span className="task__time">
+                  {habit.end_time ? `${habit.start_time}–${habit.end_time}` : habit.start_time}
+                </span>
+              )}
               {habit.title}
               <span className="small muted">
                 {" "}
@@ -227,6 +234,31 @@ export default function Habits() {
               onChange={(event) => setDraft({ ...draft, points: Number(event.target.value) })}
             />
           </label>
+
+          {/* Vaqt shu yerda — odatga qo'yilsa, har kungi nusxaga o'zi
+              ko'chadi va eslatma o'z-o'zidan ishlaydi */}
+          <div style={{ marginBottom: 10 }}>
+            <div className="small muted" style={{ marginBottom: 6 }}>
+              Vaqt oralig'i (ixtiyoriy) — belgilansa, eslatma keladi
+            </div>
+            <div className="row row--times">
+              <input
+                type="time"
+                aria-label="Boshlanish vaqti"
+                value={draft.start_time ?? ""}
+                onChange={(event) =>
+                  setDraft({ ...draft, start_time: event.target.value || null })
+                }
+              />
+              <span className="muted">–</span>
+              <input
+                type="time"
+                aria-label="Tugash vaqti"
+                value={draft.end_time ?? ""}
+                onChange={(event) => setDraft({ ...draft, end_time: event.target.value || null })}
+              />
+            </div>
+          </div>
 
           <div className="row" style={{ gap: 8, marginBottom: 10 }}>
             <button

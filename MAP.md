@@ -6,7 +6,7 @@
 > yoki servis funksiyasi o'zgarsa, qaror qabul qilinsa). Qator raqamlari
 > taxminiy — ular bo'yicha `offset` bilan o'qish mumkin, lekin tekshirib ol.
 >
-> Oxirgi yangilangan: 2026-08-14 (odatlar ajratildi, jamoadan chiqish) · Faza 1 tugagan
+> Oxirgi yangilangan: 2026-08-15 (vazifa vaqti + eslatma, qo'shimcha vazifalar) · Faza 1 tugagan
 
 ---
 
@@ -59,20 +59,20 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 
 | Fayl | Mazmuni |
 |---|---|
-| [models.py](shared/models.py) | **11 jadval + 9 sanoq.** Enumlar `:73-140`, `User:146`, `Group:183`, `Membership:201`, `Habit:223`, `Task:260`, `DailyPlan:320`, `StreakState:350`, `Nudge:369`, `Reaction:390`, `ReminderLog:409`, Faza 2: `Goal:436`, `JournalEntry:452` |
-| [config.py](shared/config.py) | `Settings` pydantic (`:28`), barcha `.env` kalitlari, `get_settings()` lru_cache (`:136`) |
-| [clock.py](shared/clock.py) | "Hozir" tushunchasining **yagona manbayi**: `now_utc`, `today_local`, `is_due` (`:78`), `week_start` |
+| [models.py](shared/models.py) | **11 jadval + 9 sanoq.** Enumlar, `User`, `Group`, `Membership`, `Habit`, `Task`, `DailyPlan`, `StreakState`, `Nudge`, `Reaction`, `ReminderLog`, Faza 2: `Goal`, `JournalEntry`. **Vaqt maydonlari:** `Habit.start_time/end_time` (shablon) → `Task.start_time/end_time` (nusxa), `User.task_lead_min` (0 = o'chirilgan). **Qo'shimcha:** `Task.is_extra`, `DailyPlan.extra_count/extra_done_count`. `ReminderLog.task_id` (NOT NULL, standart 0) |
+| [config.py](shared/config.py) | `Settings` pydantic (`:28`), barcha `.env` kalitlari, `get_settings()` lru_cache |
+| [clock.py](shared/clock.py) | "Hozir" tushunchasining **yagona manbayi**: `now_utc`, `today_local`, `is_due`, `week_start`, `shift_time` (vazifa eslatmasi uchun, sana chegarasidan o'tmaydi), `fmt_range` (`"07:00–07:45"`) |
 | [db.py](shared/db.py) | async engine, `session_factory`, `create_all()`. **SQLite PRAGMA'lari `:48`** — WAL + `busy_timeout=5s`: usiz bot, API va eslatma sikli bir vaqtda yozganda `database is locked` chiqadi |
 
 ### services/ — biznes-logika
 
 | Fayl | Asosiy funksiyalar |
 |---|---|
-| [planning.py](services/planning.py) 376q | `get_or_create_user:32`, `_generate_habit_tasks:80` (odatdan kunlik vazifa), `open_day:132`, `recalc_day:154`, `add_task:184`, `set_status:230`, `set_miss_reason:261`, `move_task:278`, `submit_plan:303`, `close_day:319` |
-| [stats.py](services/stats.py) 312q | **Maxfiylik shu yerda qo'llanadi:** `visible_to_partner:54`, `serialize_task:58`. Yana: `day_view:79`, `partner_cards:98`, `daily_series:125`, `reason_breakdown:166`, `habit_matrix:202`, `leaderboard:255`, `week_leaderboard:309` |
-| [notify.py](services/notify.py) 310q | Barcha Telegram xabarlari: `safe_send:43` (blok/xatoni yutadi), `already_sent/mark_sent:72,85` (idempotentlik), `send_plan_reminder:95`, `send_digest:108`, `nag_partners_about:133`, `close_and_summarize:164`, `ask_reasons:199`, `send_nudge:248`, `notify_removed:278`, `notify_left:290` (chiqqanda qolganlarga + chiquvchining o'ziga) |
-| [scheduler.py](services/scheduler.py) | `fire_due_for:32` — 5 qadam **shu tartibda**: kun_yopish → sabab → ertalabki → kechki → sherikka. `tick:64` (har foydalanuvchi alohida sessiya), `run_forever:109` |
-| [scoring.py](services/scoring.py) | Ball formulasi ajratib qo'yilgan: `day_score:30`, `completion_pct:39`, `summarize:51` |
+| [planning.py](services/planning.py) | `get_or_create_user`, `_generate_habit_tasks` (odatdan kunlik vazifa, **vaqtni ham ko'chiradi**), `open_day`, `recalc_day`, `get_task`, `get_tasks` (**tartib: vaqtlilar avval, vaqtsizlari oxirida**), `add_task` (`start_time`/`end_time`/`is_extra`), `set_task_time`, `set_status`, `set_miss_reason`, `move_task` (**`user` obyektini oladi**, `user_id` emas), `submit_plan`, `close_day`, `missed_tasks_without_reason` (qo'shimchani chiqarib tashlaydi) |
+| [stats.py](services/stats.py) | **Maxfiylik shu yerda qo'llanadi:** `visible_to_partner`, `serialize_task`. Yana: `day_view`, `partner_cards`, `daily_series`, `reason_breakdown`, `habit_matrix`, `leaderboard` (**`is_extra` filtri shu yerda qo'lda yozilgan**), `week_leaderboard` |
+| [notify.py](services/notify.py) | Barcha Telegram xabarlari: `safe_send` (blok/xatoni yutadi), `already_sent/mark_sent` (idempotentlik, `task_id` bilan), `send_plan_reminder`, `send_digest` (qatorlarda vaqt), **`send_task_reminders`** (vazifa boshlanishidan oldin), `nag_partners_about`, `close_and_summarize`, `ask_reasons`, `send_nudge`, `notify_removed`, `notify_left` |
+| [scheduler.py](services/scheduler.py) | `fire_due_for` — 5 belgilangan qadam **shu tartibda**: kun_yopish → sabab → ertalabki → kechki → sherikka, keyin **6-qadam: vazifa eslatmalari** (vaqti yo'q — tekshiruv `notify` ichida). `tick` (har foydalanuvchi alohida sessiya), `run_forever` |
+| [scoring.py](services/scoring.py) | Ball formulasi va **reja/qo'shimcha ajratmasi shu yerda**: `counted` (reja), `extras`, `day_score`, `completion_pct`, `summarize` |
 | [streak.py](services/streak.py) | `_is_success:33` (`STREAK_SUCCESS_PCT` shu yerda), `recalc:39` |
 | [groups.py](services/groups.py) 250q | Taklif kodi, `ensure_group:47`, `join_by_code:84`, `partners:130`. **Sardor huquqlari:** `is_owner:153`, `require_owner:157`, `rename:167`, `reset_invite_code:176`, `leave:183`, `remove_member:223`. Xatolar: `TeamError:76`, `NotOwnerError:80` (API 403 ga aylantiradi) |
 
@@ -83,9 +83,9 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | `GET /api/health` | [main.py:45](api/main.py) |
 | `GET /me` · `PATCH /me` | [user_settings.py:50,62](api/routers/user_settings.py) — javobda `group` bloki ham bor (nom, `partner_count`, `is_owner`, `invite_code` — kod faqat sardorga) |
 | `GET /day/{day}` | [days.py:28](api/routers/days.py) — `day` = `today`/`tomorrow`/ISO sana |
-| `POST /day/{day}/tasks` | days.py:47 |
+| `POST /day/{day}/tasks` | days.py — **qo'shimcha/reja qarori shu yerda**: `is_extra = (kun == bugun)`. O'tgan kun → 400, bugungi qo'shimchaga o'tgan vaqt → 400 |
 | `POST /day/{day}/submit` | days.py:69 |
-| `PATCH /tasks/{id}` · `POST /tasks/{id}/move` · `DELETE /tasks/{id}` | days.py:85,105,121 |
+| `PATCH /tasks/{id}` · `POST /tasks/{id}/move` · `POST /tasks/{id}/time` · `DELETE /tasks/{id}` | days.py — `DELETE` bugungi **rejani** o'chirtirmaydi (qo'shimchani o'chirsa bo'ladi) |
 | `GET/POST /habits` · `PUT/DELETE /habits/{id}` | [habits.py:32,45,75,114](api/routers/habits.py) (DELETE = arxivlash) |
 | `GET /team` · `POST /team/join` · `/team/nudge` · `/team/react` | [team.py:37,158,177,210](api/routers/team.py) |
 | `POST /team/leave` | team.py:133 — o'z ixtiyori bilan chiqish (sardor ham). Yolg'iz bo'lsa 400 |
@@ -125,14 +125,14 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | [api.ts](web/src/api.ts) | Barcha TS tiplari + `api` obyekti (oxirida) — endpoint o'zgarsa shu yer |
 | [telegram.ts](web/src/telegram.ts) | `tg`, `initTelegram`, `haptic`, `alertUser`, `confirmUser` (qaytarib bo'lmaydigan amallar uchun), `showMainButton`, `showBackButton` (sozlamalar oynasini yopadi) |
 | [hooks.ts](web/src/hooks.ts) | `ROUTES` (barcha marshrutlar), `useRoute` (hash router — Telegram parametrlarini ajratadi), `useAsync` |
-| [pages/Today.tsx](web/src/pages/Today.tsx) 95q | Bugungi ro'yxat, ✅. Sherigi yo'q bo'lsa tepada Jamoa tabiga yo'llovchi kartochka (`/me` dagi `group.partner_count` dan) |
-| [pages/Tomorrow.tsx](web/src/pages/Tomorrow.tsx) 120q | Reja kiritish, submit |
+| [pages/Today.tsx](web/src/pages/Today.tsx) | **Ikki bo'lim: «Reja» va «Qo'shimcha».** Rejada faqat ✅ (qulf saqlanadi), qo'shimchada ✅ + ✕ + kiritish qatori. Sherigi yo'q bo'lsa tepada Jamoa tabiga yo'llovchi kartochka |
+| [pages/Tomorrow.tsx](web/src/pages/Tomorrow.tsx) | Reja kiritish (vaqt bilan), vazifa vaqtini joyida tahrirlash, submit |
 | [pages/Team.tsx](web/src/pages/Team.tsx) 300q | **Faqat kunlik ko'rinish:** sherik kartochkalari, ularning bugungi ro'yxati, reaksiya, turtki, haftalik reyting. Boshqaruv amallari yo'q — hammasi sozlamalarda. **Sherigi yo'q bo'lsa butun sahifa `Invite` ekraniga almashadi** (nega sherik kerak + kod + qo'shilish) |
 | [pages/Stats.tsx](web/src/pages/Stats.tsx) 83q | Grafiklarni yig'adi |
 | [pages/Habits.tsx](web/src/pages/Habits.tsx) 205q | **Odatlar CRUD** (ro'yxat, tahrir formasi, jadval, maxfiylik, arxivlash) |
 | [pages/Settings.tsx](web/src/pages/Settings.tsx) 300q | Eslatma vaqtlari, sherik toggle'lari, reytingni o'chirish + **«Jamoa» bo'limi = jamoani boshqarishning yagona joyi:** nomni tahrirlash, a'zolar ro'yxati va ularni chiqarish, taklif kodi (nusxalash, yangilash), jamoadan chiqish. Uchta qaytmas amal ham `confirmUser` so'raydi. Barchasi `/me` dagi `group` blokidan. `onClose` propini oladi |
 | [components/charts.tsx](web/src/components/charts.tsx) 309q | `TrendChart`, `ReasonsChart`, `HabitHeatmap`, `SeriesTable` — SVG, kutubxonasiz |
-| [components/ui.tsx](web/src/components/ui.tsx) | `Card`, `Tiles`, `ProgressBar`, `TaskRow`, `Loading`, `ErrorBox` |
+| [components/ui.tsx](web/src/components/ui.tsx) | `Card`, `Tiles`, `ProgressBar`, `TaskRow` (vaqt yorlig'i; amal tugmalari `readonly` ga bog'liq emas), `timeRange`, `TaskComposer` (nom + ⏱ bilan ochiladigan vaqt maydonlari — «Bugun» va «Ertaga» da bir xil), `TimeEditor`, `Loading`, `ErrorBox` |
 | [theme.css](web/src/theme.css) 472q | Telegram theme o'zgaruvchilari, barcha stil |
 
 ## 5. Buzib bo'lmaydigan qoidalar
@@ -146,8 +146,23 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 4. **Maxfiylik bitta joyda:** `services/stats.py:54-77`. `private` odat
    sherikka ham, umumiy foizga ham, **reyting baliga ham** kirmaydi — aks
    holda "ball qayerdan keldi?" savoli uning borligini fosh qiladi.
-5. **Eslatma bir marta ketadi:** `ReminderLog` (user+kind+date unique). Bu
-   jadvalsiz restart har safar xabarni qayta yuboradi.
+5. **Eslatma bir marta ketadi:** `ReminderLog` (user+kind+date+**task_id**
+   unique). Bu jadvalsiz restart har safar xabarni qayta yuboradi.
+   **`task_id` NULL bo'lmaydi** (standarti `0`): SQLite `UNIQUE` da NULL'lar
+   bir-biridan farqli hisoblanadi, ya'ni maydonni `nullable` qilish beshta
+   kunlik eslatma turining kafolatini **jimgina** buzadi — xato ko'rinmaydi,
+   shunchaki xabar takrorlana boshlaydi.
+5a. **Qo'shimcha — reja emas.** Bugungi kunga qo'shilgan ish (`Task.is_extra`)
+   na `completion_pct` ga, na `score` ga, na streakka kiradi; ular faqat
+   `extra_count`/`extra_done_count` da ko'rinadi. Sabab: reja kechqurun
+   berilgan va'da — kun ichida unga qo'shsa bo'lsa, ertalab bajarilgan ishni
+   yozib qo'yish orqali foizni ko'tarish mumkin bo'lardi (2/4 = 50% →
+   3/5 = 60%) va sherik ko'rgan ro'yxat kun davomida o'zgarib turardi.
+   Ajratma **`services/scoring.py`** da; lekin `stats.leaderboard` reytingni
+   `daily_plans` dan emas, `tasks` dan hisoblaydi — **u yerda `is_extra`
+   filtri qo'lda yozilgan** va yangi so'rov qo'shilsa ham yozilishi shart.
+   Xuddi shu sabab `reason_breakdown` da ham (qo'shimchadan sabab so'ralmaydi,
+   ya'ni ular grafikni "noma'lum" bilan to'ldirib yuborardi).
 6. **Matnlar `bot/locales/uz.py` da**, kodga yozilmaydi.
 7. **Taklif kodi faqat sardorga ko'rinadi** (API `invite_code` ni boshqalarga
    `null` qaytaradi, bot `/jamoa` da `GROUP_INFO_MEMBER` ni ko'rsatadi).
@@ -172,11 +187,13 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 
 | Nima qilmoqchiman | Qayerga |
 |---|---|
-| Yangi jadval / maydon | `shared/models.py` → `scripts/init_db.py` (migratsiya yo'q, SQLite qayta yaratiladi) |
+| Yangi jadval / maydon | `shared/models.py` → yangi baza uchun `scripts/init_db.py`, **mavjud bazani yangilash uchun migratsiya skripti** (naqsh: `scripts/migrate_002_time.py` — idempotent `ADD COLUMN`, `UNIQUE` o'zgarsa jadvalni qayta qurish) |
 | Yangi `.env` sozlamasi | `shared/config.py:28` + `.env.example` + README jadvali |
 | Ball / foiz formulasi | `services/scoring.py` (yagona joy) |
 | Streak qoidasi | `services/streak.py:33` |
-| Eslatma vaqti yoki tartibi | `services/scheduler.py:42` + `shared/config.py` |
+| Eslatma vaqti yoki tartibi | `services/scheduler.py` (`steps`) + `shared/config.py` |
+| Vazifa vaqti / undan oldingi eslatma | `shared/clock.py` (`shift_time`, `fmt_range`) → `services/notify.py` (`send_task_reminders`) → `scheduler.fire_due_for` ning 6-qadami |
+| Qo'shimcha nimaga ta'sir qilishi | `services/scoring.py` (`counted`/`extras`) **va** `services/stats.py` dagi `is_extra` filtrlari |
 | Xabar matni | `bot/locales/uz.py` |
 | Yangi endpoint | `api/routers/*.py` + `api/schemas.py` + `web/src/api.ts` |
 | Yangi ekran | `web/src/pages/` + `App.tsx` dagi `TABS` (5 tadan oshirmang — 375px ekranda yorliqlar o'qilmay qoladi; kam ishlatiladigani ⚙️ oynasiga) |
@@ -198,6 +215,19 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | Zaxira | har kuni 03:00, `data/backups/`, 30 kun saqlanadi |
 
 Batafsil o'rnatish va yangilash: [deploy/SERVER.md](deploy/SERVER.md).
+
+**Yangilash — bitta buyruq:**
+
+```bash
+ssh -i ~/.ssh/growth-up ubuntu@158.178.149.128 /opt/growth-up/deploy/update.sh
+```
+
+[deploy/update.sh](deploy/update.sh) o'zi hal qiladi: `git pull` → o'zgargan
+bo'lsa bog'liqliklar va frontend → ilovani to'xtatish → **zaxira** →
+`scripts/migrate_*.py` larni ketma-ket bajarish → ishga tushirish →
+`/api/health` tekshiruvi. Migratsiyalar idempotent, shuning uchun har safar
+ishga tushiriladi va "qaysi birini bajargan edim" degan savol tug'ilmaydi.
+Yangi migratsiya `scripts/migrate_NNN_nom.py` deb qo'yilsa yetadi.
 
 **Domen `nip.io` — vaqtinchalik yechim:** u IP manzilni domenga aylantiradi
 (`158.178.149.128.nip.io` → o'sha IP), ro'yxatdan o'tish talab qilmaydi.
@@ -235,7 +265,7 @@ o'rnatiladi).
 ## 9. Testlar
 
 `python -m pytest` (o'rnatish: `pip install -r requirements-dev.txt`).
-**Serverga chiqarishdan oldin majburiy.** 161 ta test, ~25 soniya.
+**Serverga chiqarishdan oldin majburiy.** 190 ta test, ~20 soniya.
 
 | Fayl | Nimani qo'riqlaydi |
 |---|---|
@@ -249,6 +279,8 @@ o'rnatiladi).
 | [test_auth.py](tests/test_auth.py) | **initData imzosi:** buzilgan `user_id`, begona token, muddati o'tgani rad etilishi |
 | [test_integrity.py](tests/test_integrity.py) | Har modul import bo'lishi, `T.NOM` mavjudligi, `.format()` kalitlari matnga mosligi, o'lik matnlar ro'yxati |
 | [test_db.py](tests/test_db.py) | WAL rejimi, `busy_timeout`, ikki sessiyaning parallel yozuvi |
+| [test_task_time.py](tests/test_task_time.py) | `shift_time` sana chegarasi, `fmt_range`, odat vaqtining nusxaga ko'chishi, ro'yxat tartibi, eslatmaning vaqtida ketishi va **har vazifaga bir martadan** (`task_id` ishlashi), `task_lead_min=0`, jadvalning 6-qadami. `soatni_toxtat` fixture'i `clock.now_local` ni qotiradi — aks holda testlar sutkaning qaysi soatida ishga tushirilganiga qarab yiqilardi |
+| [test_extra_tasks.py](tests/test_extra_tasks.py) | **Asosiy qoida:** qo'shimcha foizni, ballni, reytingni va streakni tebratmasligi. Yana: bugun→qo'shimcha / ertaga→reja, o'tgan kunga va o'tgan vaqtga taqiq, qo'shimchadan sabab so'ralmasligi, bugungi rejani o'chirib bo'lmasligi |
 
 `tests/conftest.py` `os.environ` ni **import'lardan oldin** qo'yadi —
 `shared/db.py` dvigatelni import paytida yaratadi, kech qo'ysak testlar
@@ -258,16 +290,17 @@ haqiqiy `data/growth.db` ga tegib ketardi.
 
 **Tugagan:** Faza 1 to'liq — reja, odatlar, eslatmalar, jamoa, reyting,
 statistika, maxfiylik, sardor huquqlari (nom / kod / a'zoni chiqarish),
-jamoadan chiqish.
+jamoadan chiqish. **2026-08-15:** vazifa vaqti (boshlanish–tugash) va
+undan oldingi eslatma, bugungi kunga qo'shimcha vazifalar.
 
 **Loyiha real ishlatish bosqichiga o'tdi (2026-08-14).** Endi o'zgarishlar
 taxmindan emas, ishlatib ko'rgandan keyin keladi — odatlarning sozlamalardan
 ajratilishi ham, chiqish tugmasi ham shundan tug'ildi. Yangi taklifni
 baholaganda: shikoyat ishonchli, unga ilova qilingan yechim — har doim emas.
 
-**Yo'q:** migratsiya (Alembic — model o'zgarsa baza qo'lda yangilanadi),
-Faza 2 (`Goal`, `JournalEntry` jadvallari bo'sh turibdi), CI (testlar
-qo'lda ishga tushiriladi).
+**Yo'q:** Alembic (model o'zgarsa qo'lda migratsiya skripti yoziladi —
+`scripts/migrate_002_time.py` naqshi), Faza 2 (`Goal`, `JournalEntry`
+jadvallari bo'sh turibdi), CI (testlar qo'lda ishga tushiriladi).
 
 **Kod GitHub'da:** <https://github.com/Quvonchbek-man/growth-up> (public).
 `.env` va baza repoda yo'q va bo'lmasligi kerak.
@@ -293,16 +326,23 @@ xabarga umuman javob bermaydi.
    2 kishilik jamoada ishonch masalasi. **Kerak bo'lib qolsa:** kiritish
    qatoriga emas, yaratilgan vazifaga bosib o'zgartirish va 1–10 emas,
    3 pog'ona (oddiy / katta / juda katta).
-5. **Bugungi kun ataylab qulflangan (2026-08-14).** `Today.tsx` da faqat ✅
-   bor: qo'shish ham, o'chirish ham yo'q. Sabab: kun ichida tahrirlanadigan
-   ro'yxat va'da bo'lishdan to'xtaydi — kechqurun bajarilgan ishni qo'shib
-   qo'yish foizni ham, ballni ham yolg'on qiladi, sherik esa buni ko'rmaydi.
-   **Buni ochish taklif qilinsa — avval foydalanuvchi bilan gaplashing.**
-   Yon ta'siri: `SKIPPED` holati (`scoring.py` da na songa, na maxrajga
-   kiradi — "kasal bo'lgan kun") UI'dan umuman qo'yib bo'lmaydi, ya'ni
-   mo'ljallangan yumshatish ulanmagan. Foydalanuvchida bunga **boshqacha
-   logika** bor, hozircha ataylab qoldirilgan — o'zicha "skip tugmasi"
-   qo'shmang, avval so'rang.
+5. **Bugungi REJA hamon qulflangan (2026-08-14), qo'shimcha esa ochildi
+   (2026-08-15).** `Today.tsx` dagi «Reja» bo'limida faqat ✅ — qo'shish
+   ham, o'chirish ham yo'q, va bu shunday qoladi: kun ichida tahrirlanadigan
+   reja va'da bo'lishdan to'xtaydi. Ertalab paydo bo'ladigan haqiqiy ish
+   uchun **alohida sinf** qo'shildi (§5a) — u rejaga qo'shilmaydi, yonida
+   turadi va hech qanday raqamga tegmaydi. **Rejaning o'zini ochish taklif
+   qilinsa — avval foydalanuvchi bilan gaplashing.**
+   Yon ta'siri o'z joyida: `SKIPPED` holati (`scoring.py` da na songa, na
+   maxrajga kiradi — "kasal bo'lgan kun") UI'dan hamon qo'yib bo'lmaydi.
+   Foydalanuvchida bunga **boshqacha logika** bor, ataylab qoldirilgan —
+   o'zicha "skip tugmasi" qo'shmang, avval so'rang.
+6. **Qo'shimchaga cheklov qo'yilmagan (2026-08-15).** Kuniga nechta va
+   qaysi soatda qo'shish mumkinligi cheklanmagan — foydalanuvchining ochiq
+   qarori. Bu xavfsiz, chunki qo'shimcha ball bermaydi; agar kelajakda
+   qo'shimchaga ball berish qaytadan ko'rib chiqilsa, **avval cheklov
+   masalasi hal qilinishi kerak** (aks holda kun oxirida mayda ish qo'shib
+   reyting yig'ish yo'li ochiladi).
 
 **Rejada, lekin ataylab kechiktirilgan:** taklif **havolasi** (`t.me/<bot>?start=KOD`).
 Bot tomoni tayyor — `start.py:37` deep link'ni allaqachon qabul qiladi. Qilinsa:

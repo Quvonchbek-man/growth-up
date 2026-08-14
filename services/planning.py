@@ -7,7 +7,7 @@ yaratiladi. Nusxa yaratilgandan keyin odat o'zgarsa, o'tmish o'zgarmaydi.
 
 from __future__ import annotations
 
-from datetime import date as date_type, timedelta
+from datetime import date as date_type, time as time_type, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +44,7 @@ async def get_or_create_user(
             tz=settings.timezone,
             plan_reminder_at=settings.plan_reminder_time,
             digest_at=settings.digest_time,
+            task_lead_min=settings.task_reminder_lead_min,
         )
         session.add(user)
         await session.flush()
@@ -69,10 +70,17 @@ async def get_plan(session: AsyncSession, user_id: int, d: date_type) -> DailyPl
 
 
 async def get_tasks(session: AsyncSession, user_id: int, d: date_type) -> list[Task]:
+    """Kun vazifalari: avval vaqtlilar (vaqt bo'yicha), keyin vaqtsizlari.
+
+    Tartib shu bitta joyda — digest, Mini App va bot ro'yxatlari hammasi
+    shu funksiyadan o'qiydi, ya'ni kun hamma joyda bir xil ko'rinadi.
+    """
     rows = await session.scalars(
         select(Task)
         .where(Task.user_id == user_id, Task.date == d)
-        .order_by(Task.sort_order, Task.id)
+        .order_by(
+            Task.start_time.is_(None), Task.start_time, Task.sort_order, Task.id
+        )
     )
     return list(rows)
 
@@ -119,6 +127,8 @@ async def _generate_habit_tasks(
                 points=habit.points,
                 visibility=habit.visibility,
                 sort_order=habit.sort_order,
+                start_time=habit.start_time,
+                end_time=habit.end_time,
                 status=TaskStatus.PLANNED,
             )
         )
@@ -178,6 +188,8 @@ async def recalc_day(
     plan.done_count = stats["done_count"]
     plan.score = stats["score"]
     plan.completion_pct = stats["completion_pct"]
+    plan.extra_count = stats["extra_count"]
+    plan.extra_done_count = stats["extra_done_count"]
     return plan
 
 
@@ -189,10 +201,22 @@ async def add_task(
     *,
     points: int = 1,
     visibility=None,
+    start_time: time_type | None = None,
+    end_time: time_type | None = None,
+    is_extra: bool = False,
 ) -> Task:
+    """Kunga vazifa qo'shadi.
+
+    `is_extra` — bugungi kunga qo'shilgan ish uchun. Qarorni chaqiruvchi
+    (`api/routers/days.py`) qabul qiladi, bu yer faqat saqlaydi.
+    """
     title = title.strip()[:200]
     if not title:
         raise ValueError("Vazifa nomi bo'sh")
+    if end_time is not None and start_time is None:
+        raise ValueError("Tugash vaqti uchun boshlanish vaqti ham kerak")
+    if start_time is not None and end_time is not None and end_time <= start_time:
+        raise ValueError("Tugash vaqti boshlanishidan keyin bo'lishi kerak")
 
     last_order = await session.scalar(
         select(Task.sort_order)
@@ -208,11 +232,49 @@ async def add_task(
         points=max(1, min(points, 10)),
         visibility=visibility,
         sort_order=(last_order or 0) + 1,
+        start_time=start_time,
+        end_time=end_time,
+        is_extra=is_extra,
         status=TaskStatus.PLANNED,
     )
     session.add(task)
     await session.flush()
     await recalc_day(session, user.id, d)
+    return task
+
+
+async def set_task_time(
+    session: AsyncSession,
+    user_id: int,
+    task_id: int,
+    start_time: time_type | None,
+    end_time: time_type | None,
+) -> Task | None:
+    """Mavjud vazifaning oralig'ini o'zgartiradi (ikkalasi ham `None` — olib tashlaydi).
+
+    Odat nusxasiga ham ruxsat: bir kunga vaqtni surish odatning o'zini
+    o'zgartirmaydi (`Habit` — shablon, `Task` — nusxa).
+    """
+    if end_time is not None and start_time is None:
+        raise ValueError("Tugash vaqti uchun boshlanish vaqti ham kerak")
+    if start_time is not None and end_time is not None and end_time <= start_time:
+        raise ValueError("Tugash vaqti boshlanishidan keyin bo'lishi kerak")
+
+    task = await session.get(Task, task_id)
+    if task is None or task.user_id != user_id:
+        return None
+
+    task.start_time = start_time
+    task.end_time = end_time
+    await session.flush()
+    return task
+
+
+async def get_task(session: AsyncSession, user_id: int, task_id: int) -> Task | None:
+    """Vazifani egasini tekshirib qaytaradi. Begonasi uchun `None`."""
+    task = await session.get(Task, task_id)
+    if task is None or task.user_id != user_id:
+        return None
     return task
 
 
@@ -276,7 +338,7 @@ async def set_miss_reason(
 
 
 async def move_task(
-    session: AsyncSession, user_id: int, task_id: int, new_date: date_type
+    session: AsyncSession, user: User, task_id: int, new_date: date_type
 ) -> Task | None:
     """Bajarilmagan vazifani boshqa kunga ko'chirish.
 
@@ -284,7 +346,7 @@ async def move_task(
     aks holda ro'yxat cheksiz o'sib ketadi va ma'nosini yo'qotadi.
     """
     task = await session.get(Task, task_id)
-    if task is None or task.user_id != user_id:
+    if task is None or task.user_id != user.id:
         return None
     if task.source == TaskSource.HABIT:
         # Odat nusxasini ko'chirish mantiqsiz — u ertaga baribir yaratiladi
@@ -294,9 +356,13 @@ async def move_task(
     task.date = new_date
     task.status = TaskStatus.PLANNED
     task.done_at = None
+    # Kelajakka ko'chirilgan ish o'sha kunning REJASI bo'ladi; bugunga
+    # ko'chirilgani esa qo'shimcha bo'lib qoladi — bugungi va'da allaqachon
+    # berilgan, unga ortdan qo'shib bo'lmaydi.
+    task.is_extra = new_date <= clock.today_local(user.tz)
     await session.flush()
-    await recalc_day(session, user_id, old_date)
-    await recalc_day(session, user_id, new_date)
+    await recalc_day(session, user.id, old_date)
+    await recalc_day(session, user.id, new_date)
     return task
 
 
@@ -341,12 +407,19 @@ async def close_day(session: AsyncSession, user: User, d: date_type) -> DailyPla
 async def missed_tasks_without_reason(
     session: AsyncSession, user_id: int, d: date_type
 ) -> list[Task]:
+    """Sabab so'raladigan vazifalar — faqat REJA.
+
+    Qo'shimcha kun ichida o'z ixtiyori bilan qo'shilgan, va'da qilinmagan.
+    Uni bajarmaganlik uchun hisobot so'rash odamni "qo'shmay qo'ya qolay"
+    degan xulosaga olib keladi — qo'shimcha imkoniyatining o'zi o'ladi.
+    """
     rows = await session.scalars(
         select(Task).where(
             Task.user_id == user_id,
             Task.date == d,
             Task.status == TaskStatus.MISSED,
             Task.miss_reason.is_(None),
+            Task.is_extra.is_(False),
         )
     )
     return list(rows)

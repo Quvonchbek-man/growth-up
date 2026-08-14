@@ -15,8 +15,22 @@ turibdi, shuning uchun tashlab yubormayman.** Kod shu mexanizmga xizmat qiladi.
 | 21:00 | siz | Bot ertangi rejani so'raydi. Odatlar avtomatik, qo'shimchasini yozasiz |
 | 22:30 | **sherigingiz** | Siz kiritmagan bo'lsangiz — unga xabar + «Turtki ber» tugmasi |
 | 09:00 | siz | Bugungi ro'yxat, botdan bir bosishda ✅ |
+| kun bo'yi | siz | Vaqti belgilangan ish boshlanishidan 10 daqiqa oldin eslatma |
 | 00:05 | tizim | Kun yopiladi: ball, streak, bajarilmaganlar `missed` bo'ladi |
 | 00:10 | siz | Bajarilmaganlar uchun sabab so'raladi |
+
+### Vaqt va qo'shimchalar
+
+Har vazifaga **oraliq** qo'yish mumkin (`07:00–07:45`) — odatga qo'ysangiz,
+har kungi nusxasiga o'zi ko'chadi. Belgilangan vaqtdan oldin bot eslatadi:
+*«⏰ 10 daqiqadan keyin: Sport»*. Necha daqiqa oldin — sozlamalarda
+(`0` = o'chirilgan).
+
+Ertalab reja tashqarisida ish chiqsa, uni **«Bugun» ekranidagi «Qo'shimcha»
+bo'limiga** yozasiz. Qo'shimcha bajarilishi foiziga, ballga va streakka
+**kirmaydi** — reja kechqurun berilgan va'da, uni kun ichida o'zgartirib
+bo'lmaydi, aks holda raqamlar ma'nosini yo'qotadi. Sherigingiz esa uni
+ko'radi: *«4/5 +2»*.
 
 ---
 
@@ -111,11 +125,25 @@ python -m scripts.seed_demo
 ```
 
 30 kunlik tarix yozadi: notekis bajarilish, dam olish kunlarida pasayish,
-dushanba kunlari uzilib qoladigan sport odati, sabablar taqsimoti.
+dushanba kunlari uzilib qoladigan sport odati, sabablar taqsimoti, vaqti
+belgilangan va belgilanmagan odatlar, kun ichida qo'shilgan qo'shimchalar.
 Grafiklarni real ma'lumot yig'ilishini kutmasdan ko'rish uchun.
 
 **Diqqat:** skript sizning va namunaviy sherikning mavjud ma'lumotini
 o'chirib qayta yozadi.
+
+### Mavjud bazani yangilash
+
+Modelga yangi maydon qo'shilganda `init_db` mavjud jadvalni o'zgartirmaydi —
+bir martalik migratsiya skripti ishlatiladi. Vaqt va qo'shimchalar uchun:
+
+```bash
+cp data/growth.db data/backups/growth-$(date +%F).db
+python -m scripts.migrate_002_time
+```
+
+Skript idempotent: ikkinchi marta ishga tushirilsa hech narsa qilmaydi.
+Yangi o'rnatishda kerak emas — `init_db` hammasini o'zi yaratadi.
 
 ### Eslatmalarni sinash
 
@@ -126,7 +154,7 @@ Kechgacha kutmasdan, botda (faqat `SUPER_ADMIN_IDS` uchun):
 ```
 
 Barcha eslatmalarni darhol yuboradi — kechki, ertalabki, sherikka xabar,
-kun yakuni, sabab so'rovi.
+kun yakuni, sabab so'rovi va bugungi eng yaqin 3 ta vazifa eslatmasi.
 
 ```
 /vaqt
@@ -151,7 +179,7 @@ services/   biznes-logika — bot ham, API ham shu qatlamni chaqiradi
 bot/        aiogram: eslatmalar, tez belgilash, turtki
 api/        FastAPI: Mini App uchun REST + initData imzosini tekshirish
 web/        React + Vite Mini App
-scripts/    init_db, seed_demo
+scripts/    init_db, seed_demo, migrate_* (mavjud bazani yangilash)
 run.py      hammasi bitta processda
 ```
 
@@ -163,6 +191,10 @@ tushunchasi faqat `shared/clock.py` dan olinadi.
 
 **2. Odat — shablon, vazifa — o'sha kunning nusxasi.** Odatni o'zgartirsangiz
 o'tmish o'zgarmaydi. Odat o'chirilmaydi — arxivlanadi.
+
+**3. Qo'shimcha — reja emas.** Kun ichida qo'shilgan ish alohida sanaladi va
+foizga, ballga, streakka kirmaydi. Bo'lmasa, bajarib bo'lgan ishni ro'yxatga
+yozib qo'yish orqali foizni ko'tarish mumkin bo'lardi.
 
 ### Maxfiylik
 
@@ -185,6 +217,7 @@ keldi?» degan savol orqali uning borligi fosh bo'lardi.
 |---|---|---|
 | `STREAK_SUCCESS_PCT` | 60 | Kun muvaffaqiyatli hisoblanishi uchun kerakli foiz |
 | `MAX_NUDGES_PER_DAY` | 3 | Bir odamga kuniga necha marta turtki berish mumkin |
+| `TASK_REMINDER_LEAD_MIN` | 10 | Vazifa boshlanishidan necha daqiqa oldin eslatiladi (yangi foydalanuvchi uchun standart; `0` = o'chirilgan) |
 
 Streak haqida: **rejasiz kun streak'ni uzadi** (ilovaning maqsadi rejani
 yozdirish). Kasal yoki safar kunlari uchun vazifani `skipped` qilish yo'li
