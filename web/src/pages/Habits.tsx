@@ -22,10 +22,33 @@ const EMPTY_HABIT: Partial<Habit> = {
   weekdays_mask: 127,
 };
 
+/**
+ * Yangi odam uchun namunalar. Ular **avtomatik yaratilmaydi** — ko'rinadi,
+ * odam o'zi tanlab qo'shadi.
+ *
+ * Nega avtomatik emas: o'zi tanlamagan 6 ta odat bilan boshlagan odam
+ * birinchi kuniyoq yarmini bajarolmaydi, foiz past chiqadi va streak
+ * uziladi. Ilova uni hech qachon va'da bermagan ishi uchun jazolagan
+ * bo'lardi — sherigi esa buni ko'rib turadi.
+ */
+const NAMUNA_ODATLAR: Partial<Habit>[] = (
+  [
+    { title: "Ertalabki sport", icon: "🏃", points: 3, visibility: "public" },
+    { title: "30 daqiqa kitob", icon: "📖", points: 2, visibility: "public" },
+    { title: "Ingliz tili", icon: "🇬🇧", points: 2, visibility: "public" },
+    { title: "2 litr suv", icon: "💧", points: 1, visibility: "public" },
+    { title: "Erta yotish", icon: "🌙", points: 2, visibility: "stats_only" },
+    { title: "Meditatsiya", icon: "🧘", points: 1, visibility: "private" },
+  ] satisfies Partial<Habit>[]
+).map((h) => ({ ...h, schedule_kind: "daily" as const, weekdays_mask: 127 }));
+
 export default function Habits() {
   const habits = useAsync<Habit[]>(() => api.habits(), []);
   const me = useAsync<Me>(() => api.me(), []);
   const [draft, setDraft] = useState<Partial<Habit> | null>(null);
+  // Qo'shilgani ro'yxatdan chiqadi; `null` — bo'lim yopilgan
+  const [namunalar, setNamunalar] = useState<Partial<Habit>[] | null>(NAMUNA_ODATLAR);
+  const [busy, setBusy] = useState(false);
 
   if (habits.loading && !habits.data) return <Loading />;
   if (habits.error) return <ErrorBox message={habits.error} onRetry={habits.reload} />;
@@ -43,6 +66,44 @@ export default function Habits() {
     } catch (error) {
       notify("error");
       alertUser(error instanceof Error ? error.message : "Saqlanmadi");
+    }
+  }
+
+  async function namunaQosh(namuna: Partial<Habit>) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api.createHabit(namuna);
+      setNamunalar((oldingi) => {
+        const qolgan = (oldingi ?? []).filter((n) => n.title !== namuna.title);
+        return qolgan.length ? qolgan : null;
+      });
+      habits.reload();
+      notify("success");
+    } catch (error) {
+      notify("error");
+      alertUser(error instanceof Error ? error.message : "Qo'shilmadi");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function hammasiniQosh() {
+    if (busy || !namunalar) return;
+    setBusy(true);
+    try {
+      for (const namuna of namunalar) {
+        await api.createHabit(namuna);
+      }
+      setNamunalar(null);
+      habits.reload();
+      notify("success");
+    } catch (error) {
+      notify("error");
+      alertUser(error instanceof Error ? error.message : "Qo'shilmadi");
+      habits.reload();
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -88,6 +149,49 @@ export default function Habits() {
 
         {list.length === 0 && <p className="empty">Hali odat yo'q. Birinchisini qo'shing.</p>}
       </section>
+
+      {/* Namunalar faqat ro'yxat bo'sh bo'lganda: nima yozish mumkinligini
+          ko'rsatadi, lekin tanlashni odamning o'ziga qoldiradi */}
+      {list.length === 0 && namunalar && (
+        <Card title="Namuna odatlar">
+          <p className="small muted" style={{ marginTop: 0 }}>
+            Boshlash uchun namunalar. Kerakligini bosing — keyin nomini ham,
+            ballini ham o'zgartirsangiz bo'ladi.
+          </p>
+
+          {namunalar.map((namuna) => (
+            <div className="task" key={namuna.title} style={{ cursor: "default" }}>
+              <span style={{ fontSize: 19 }}>{namuna.icon}</span>
+              <span className="task__title">
+                {namuna.title}
+                <span className="small muted">
+                  {" "}
+                  · {namuna.points} ball
+                  {namuna.visibility !== "public" && (
+                    <> · {namuna.visibility === "private" ? "yashirin" : "faqat foiz"}</>
+                  )}
+                </span>
+              </span>
+              <button
+                className="btn btn--small"
+                onClick={() => void namunaQosh(namuna)}
+                disabled={busy}
+              >
+                + Qo'shish
+              </button>
+            </div>
+          ))}
+
+          <div className="row" style={{ marginTop: 12 }}>
+            <button className="btn spread" onClick={() => void hammasiniQosh()} disabled={busy}>
+              Hammasini qo'shish
+            </button>
+            <button className="btn btn--ghost" onClick={() => setNamunalar(null)} disabled={busy}>
+              Kerak emas
+            </button>
+          </div>
+        </Card>
+      )}
 
       {!draft && (
         <button className="btn btn--block" onClick={() => setDraft({ ...EMPTY_HABIT })}>
