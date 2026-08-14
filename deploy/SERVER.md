@@ -123,12 +123,26 @@ crontab -e
 
 ## Yangilash
 
+O'z kompyuteringizdan, bitta buyruq:
+
 ```bash
-cd /opt/growth-up
-git pull
-.venv/bin/pip install -r requirements.txt     # bog'liqlik o'zgargan bo'lsa
-cd web && npm ci && npm run build              # frontend o'zgargan bo'lsa
-sudo systemctl restart growth-up
+ssh -i ~/.ssh/growth-up ubuntu@158.178.149.128 /opt/growth-up/deploy/update.sh
+```
+
+Skript o'zi hal qiladi: `git pull`, o'zgargan bo'lsa Python bog'liqliklari va
+frontend, keyin ilovani to'xtatib **zaxira oladi**, `scripts/migrate_*.py`
+larni ketma-ket bajaradi, qayta ishga tushiradi va `/api/health` ni
+tekshiradi. Xato bo'lsa jurnalni ko'rsatib to'xtaydi.
+
+Kod o'zgarmagan bo'lsa hech narsa qilmaydi; baribir qayta qurish kerak
+bo'lsa `deploy/update.sh --force`.
+
+**Baza migratsiyasi.** Alembic yo'q. Modelga maydon qo'shilsa
+`scripts/migrate_NNN_nom.py` yoziladi va u **idempotent** bo'lishi shart —
+skript hammasini har safar ishga tushiradi. Qo'lda bajarish kerak bo'lsa:
+
+```bash
+cd /opt/growth-up && deploy/backup.sh && .venv/bin/python -m scripts.migrate_002_time
 ```
 
 ## Nosozlik

@@ -5,6 +5,10 @@
 #
 # Frontend va bog'liqliklar faqat haqiqatan o'zgargan bo'lsa qayta quriladi —
 # har safar `npm ci` qilish 1 GB xotirali serverda bekorga vaqt oladi.
+#
+# Baza migratsiyalari har safar ishga tushadi (ular idempotent) va oldidan
+# zaxira olinadi. Alembic yo'q: model o'zgarsa `scripts/migrate_NNN_*.py`
+# yoziladi, shu skript uni o'zi topib bajaradi.
 
 set -euo pipefail
 
@@ -61,8 +65,29 @@ if echo "$OZGARGAN" | grep -q "^deploy/Caddyfile"; then
     echo "   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy"
 fi
 
-echo "→ Ilova qayta ishga tushirilyapti"
-sudo systemctl restart growth-up
+# Migratsiyalar ilova TO'XTAGANDA bajariladi: ular jadval qayta qurishi
+# mumkin (`DROP` + `RENAME`), ishlab turgan process esa o'sha paytda bazani
+# ushlab turadi. Frontend yuqorida, ilova hali tirik ekan qurildi — shuning
+# uchun to'xtash vaqti bir necha soniya bo'ladi.
+echo "→ Ilova to'xtatilyapti"
+sudo systemctl stop growth-up
+
+# Migratsiyadan OLDIN zaxira. Kunlik zaxira yetarli emas: xato migratsiya
+# bilan o'sha zaxira orasida bir kunlik ma'lumot bo'lishi mumkin.
+echo "→ Migratsiyadan oldingi zaxira"
+deploy/backup.sh
+
+# Hammasi ketma-ket ishga tushiriladi — har biri idempotent, ya'ni allaqachon
+# bajarilgani hech narsa qilmaydi. "Qaysi birini ishga tushirgan edim" degan
+# savol umuman tug'ilmasligi uchun shunday.
+for MIG in $(ls scripts/migrate_*.py 2>/dev/null | sort); do
+    MODUL="scripts.$(basename "$MIG" .py)"
+    echo "→ $MODUL"
+    .venv/bin/python -m "$MODUL"
+done
+
+echo "→ Ilova ishga tushirilyapti"
+sudo systemctl start growth-up
 sleep 6
 
 if systemctl is-active --quiet growth-up; then
