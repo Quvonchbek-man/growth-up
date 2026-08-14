@@ -15,9 +15,23 @@ set -euo pipefail
 APP_DIR="/opt/growth-up"
 cd "$APP_DIR"
 
-ESKI=$(git rev-parse HEAD)
+ESKI=${GROWTH_ESKI:-$(git rev-parse HEAD)}
 git pull -q origin main
 YANGI=$(git rev-parse HEAD)
+
+# **Skript o'zini yangilagan bo'lishi mumkin.** Bash faylni bo'lak-bo'lak
+# o'qiydi va o'qilgan joyni eslab qoladi; `git pull` faylni almashtirgach
+# o'sha joy boshqa matnga to'g'ri keladi. Natijasi jim va yomon: 2026-08-15
+# da shu sabab yangi qo'shilgan migratsiya qadami umuman bajarilmadi va
+# ilova yangi kod bilan eski sxemada ko'tarildi.
+#
+# Shuning uchun yangilanish bo'lsa — yangi nusxani boshidan ishga tushiramiz.
+# `GROWTH_ESKI` ikki vazifani bajaradi: cheksiz aylanishni to'xtatadi va
+# "qaysi commitdan keldik" ma'lumotini yangi nusxaga uzatadi.
+if [ "$ESKI" != "$YANGI" ] && [ -z "${GROWTH_ESKI:-}" ]; then
+    export GROWTH_ESKI="$ESKI"
+    exec "$APP_DIR/deploy/update.sh" "$@"
+fi
 
 # `--force`: kod allaqachon tortib olingan bo'lsa ham hammasini qayta quradi.
 # (Qo'lda `git pull` qilib, keyin shu skriptni chaqirish oson xato.)
