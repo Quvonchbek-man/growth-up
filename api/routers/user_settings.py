@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.auth import current_user, get_session
+from api.auth import current_user, get_session, is_admin
 from api.schemas import SettingsPayload
 from services import groups
 from shared import clock
@@ -53,6 +53,10 @@ async def _serialize(session: AsyncSession, user: User) -> dict:
         "notify_about_partner": user.notify_about_partner,
         "show_ranking": user.show_ranking,
         "streak_success_pct": settings.streak_success_pct,
+        # Mini App sozlamalarda «Admin panel» tugmasini shunga qarab
+        # ko'rsatadi. Tugmani yashirish himoya emas — himoya `current_admin`
+        # da; bu shunchaki oddiy odamga keraksiz tugma ko'rinmasin.
+        "is_admin": is_admin(user.id),
     }
 
 

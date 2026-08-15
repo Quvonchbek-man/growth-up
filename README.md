@@ -142,8 +142,15 @@ cp data/growth.db data/backups/growth-$(date +%F).db
 python -m scripts.migrate_002_time
 ```
 
-Skript idempotent: ikkinchi marta ishga tushirilsa hech narsa qilmaydi.
+A'zolar dinamikasi uchun (`blocked_at`):
+
+```bash
+python -m scripts.migrate_003_blocked_at
+```
+
+Skriptlar idempotent: ikkinchi marta ishga tushirilsa hech narsa qilmaydi.
 Yangi o'rnatishda kerak emas — `init_db` hammasini o'zi yaratadi.
+Serverda `deploy/update.sh` ularni o'zi topib bajaradi.
 
 ### Eslatmalarni sinash
 

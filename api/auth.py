@@ -136,3 +136,22 @@ async def current_user(
         username=tg.get("username"),
         full_name=full_name,
     )
+
+
+def is_admin(user_id: int) -> bool:
+    """Botning umumiy admini — `.env` dagi `SUPER_ADMIN_IDS` ro'yxatidan.
+
+    **Bo'sh ro'yxat hech kimga ruxsat bermaydi.** Uni "tekshiruv o'chirilgan"
+    deb talqin qilish klassik xato: `.env` to'ldirilmagan yoki noto'g'ri
+    yozilgan serverda admin paneli hamma foydalanuvchiga ochilib qolardi.
+    """
+    return user_id in settings.super_admin_ids
+
+
+async def current_admin(user: User = Depends(current_user)) -> User:
+    """Admin endpointlari uchun. Admin bo'lmasa 403."""
+    if not is_admin(user.id):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Bu bo'lim faqat bot admini uchun"
+        )
+    return user

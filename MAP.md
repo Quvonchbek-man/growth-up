@@ -6,7 +6,8 @@
 > yoki servis funksiyasi o'zgarsa, qaror qabul qilinsa). Qator raqamlari
 > taxminiy — ular bo'yicha `offset` bilan o'qish mumkin, lekin tekshirib ol.
 >
-> Oxirgi yangilangan: 2026-08-15 (vazifa vaqti + eslatma, qo'shimcha vazifalar) · Faza 1 tugagan
+> Oxirgi yangilangan: 2026-08-15 (vazifa vaqti + eslatma, qo'shimchalar,
+> taqqoslash grafigi, admin panel) · Faza 1 tugagan
 
 ---
 
@@ -59,7 +60,7 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 
 | Fayl | Mazmuni |
 |---|---|
-| [models.py](shared/models.py) | **11 jadval + 9 sanoq.** Enumlar, `User`, `Group`, `Membership`, `Habit`, `Task`, `DailyPlan`, `StreakState`, `Nudge`, `Reaction`, `ReminderLog`, Faza 2: `Goal`, `JournalEntry`. **Vaqt maydonlari:** `Habit.start_time/end_time` (shablon) → `Task.start_time/end_time` (nusxa), `User.task_lead_min` (0 = o'chirilgan). **Qo'shimcha:** `Task.is_extra`, `DailyPlan.extra_count/extra_done_count`. `ReminderLog.task_id` (NOT NULL, standart 0) |
+| [models.py](shared/models.py) | **11 jadval + 9 sanoq.** Enumlar, `User`, `Group`, `Membership`, `Habit`, `Task`, `DailyPlan`, `StreakState`, `Nudge`, `Reaction`, `ReminderLog`, Faza 2: `Goal`, `JournalEntry`. **Vaqt maydonlari:** `Habit.start_time/end_time` (shablon) → `Task.start_time/end_time` (nusxa), `User.task_lead_min` (0 = o'chirilgan). **Qo'shimcha:** `Task.is_extra`, `DailyPlan.extra_count/extra_done_count`. `ReminderLog.task_id` (NOT NULL, standart 0). `User.blocked_at` — a'zolar dinamikasi uchun (bayroqning o'zi qachonligini aytmaydi) |
 | [config.py](shared/config.py) | `Settings` pydantic (`:28`), barcha `.env` kalitlari, `get_settings()` lru_cache |
 | [clock.py](shared/clock.py) | "Hozir" tushunchasining **yagona manbayi**: `now_utc`, `today_local`, `is_due`, `week_start`, `shift_time` (vazifa eslatmasi uchun, sana chegarasidan o'tmaydi), `fmt_range` (`"07:00–07:45"`) |
 | [db.py](shared/db.py) | async engine, `session_factory`, `create_all()`. **SQLite PRAGMA'lari `:48`** — WAL + `busy_timeout=5s`: usiz bot, API va eslatma sikli bir vaqtda yozganda `database is locked` chiqadi |
@@ -74,6 +75,7 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | [scheduler.py](services/scheduler.py) | `fire_due_for` — 5 belgilangan qadam **shu tartibda**: kun_yopish → sabab → ertalabki → kechki → sherikka, keyin **6-qadam: vazifa eslatmalari** (vaqti yo'q — tekshiruv `notify` ichida). `tick` (har foydalanuvchi alohida sessiya), `run_forever` |
 | [scoring.py](services/scoring.py) | Ball formulasi va **reja/qo'shimcha ajratmasi shu yerda**: `counted` (reja), `extras`, `day_score`, `completion_pct`, `summarize` |
 | [streak.py](services/streak.py) | `_is_success:33` (`STREAK_SUCCESS_PCT` shu yerda), `recalc:39` |
+| [admin.py](services/admin.py) | **Butun bot bo'yicha** (yagona shunday modul): `overview` (odamlar, sherik holati, faollik, natija), `members_series` (**a'zolar dinamikasi** — kunlik `total`/`active`/`joined`/`left`, butun tarixdan jamg'ariladi), `recent_users` (**sana mahalliy qilib qaytariladi**), `broadcast` + `broadcast_audience`. Maxfiylik filtri yo'q — ma'lumot faqat adminga chiqadi |
 | [groups.py](services/groups.py) 250q | Taklif kodi, `ensure_group:47`, `join_by_code:84`, `partners:130`. **Sardor huquqlari:** `is_owner:153`, `require_owner:157`, `rename:167`, `reset_invite_code:176`, `leave:183`, `remove_member:223`. Xatolar: `TeamError:76`, `NotOwnerError:80` (API 403 ga aylantiradi) |
 
 ### api/ — REST (barcha yo'llar `/api` prefiksi bilan)
@@ -91,9 +93,11 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | `POST /team/leave` | team.py:133 — o'z ixtiyori bilan chiqish (sardor ham). Yolg'iz bo'lsa 400 |
 | **Sardor:** `PATCH /team` (nom) · `POST /team/code` (kodni yangilash) · `DELETE /team/members/{id}` | team.py:79,94,108 — sardor bo'lmasa 403 |
 | `GET /stats?days=30` | [stats.py:16](api/routers/stats.py) |
+| `GET /admin/overview?days=30` | [admin.py](api/routers/admin.py) — `current_admin` bog'liqligi, admin bo'lmasa 403. Ommaviy xabar bu yerda ATAYLAB yo'q (faqat botda) |
 
-- [auth.py](api/auth.py): `parse_init_data:42` (HMAC imzo), `current_user:100`
+- [auth.py](api/auth.py): `parse_init_data` (HMAC imzo), `current_user`
   Depends. `CHECK_INIT_DATA=false` bo'lsa `DEV_MOCK_USER_ID` nomidan ishlaydi.
+  Yana: `is_admin(user_id)` va `current_admin` — admin endpointlari uchun.
 - [main.py](api/main.py): CORS, `_mount_web:57` — `web/dist` bo'lmasa 503 va
   tushuntirish qaytaradi. Docs: `/api/docs`.
 - [schemas.py](api/schemas.py): pydantic so'rov modellari (8 ta).
@@ -107,9 +111,9 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | ✅ tugma (TaskCb) | [tasks.py:55](bot/handlers/tasks.py) → `_rerender:22` |
 | Sabab tanlash (ReasonCb) | tasks.py:73 |
 | «Turtki ber» (NudgeCb) | [nudge.py:17](bot/handlers/nudge.py) |
-| `/sinov`, `/vaqt` — **faqat admin** | [dev.py:22,42](bot/handlers/dev.py) |
+| `/sinov`, `/vaqt`, `/admin`, `/xabar` — **faqat admin** | [dev.py](bot/handlers/dev.py) — `/admin` butun bot ko'rsatkichlari, `/xabar` ommaviy xabar (FSM: matn → ko'rinish → tasdiq). Ular `bot/main.py` dagi `COMMANDS` ro'yxatida yo'q: menyu hammaga ko'rinadi |
 
-- [callbacks.py](bot/callbacks.py): `TaskCb/ReasonCb/NudgeCb/DayCb` CallbackData.
+- [callbacks.py](bot/callbacks.py): `TaskCb/ReasonCb/NudgeCb/DayCb/BroadcastCb`.
 - [keyboards.py](bot/keyboards.py): `open_app:26` (WebApp tugmasi), `day_tasks:52`,
   `reason_choices:77`.
 - [locales/uz.py](bot/locales/uz.py): **barcha matnlar shu yerda** (157 qator).
@@ -128,10 +132,11 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | [pages/Today.tsx](web/src/pages/Today.tsx) | **Ikki bo'lim: «Reja» va «Qo'shimcha».** Rejada faqat ✅ (qulf saqlanadi), qo'shimchada ✅ + ✕ + kiritish qatori. Sherigi yo'q bo'lsa tepada Jamoa tabiga yo'llovchi kartochka |
 | [pages/Tomorrow.tsx](web/src/pages/Tomorrow.tsx) | Reja kiritish (vaqt bilan), vazifa vaqtini joyida tahrirlash, submit |
 | [pages/Team.tsx](web/src/pages/Team.tsx) 300q | **Faqat kunlik ko'rinish:** sherik kartochkalari, ularning bugungi ro'yxati, reaksiya, turtki, haftalik reyting. Boshqaruv amallari yo'q — hammasi sozlamalarda. **Sherigi yo'q bo'lsa butun sahifa `Invite` ekraniga almashadi** (nega sherik kerak + kod + qo'shilish) |
-| [pages/Stats.tsx](web/src/pages/Stats.tsx) 83q | Grafiklarni yig'adi |
+| [pages/Stats.tsx](web/src/pages/Stats.tsx) | Grafiklarni yig'adi. Taqqoslash uchun tanlangan sherik `localStorage` da (`growth:taqqoslash`) — serverda emas, chunki bu ko'rinish sozlamasi |
+| [pages/Admin.tsx](web/src/pages/Admin.tsx) | **Bot admini uchun kuzatuv ekrani.** Tab emas — sozlamalardagi tugmadan ochiladi. Ommaviy xabar bu yerda yo'q (botda) |
 | [pages/Habits.tsx](web/src/pages/Habits.tsx) 205q | **Odatlar CRUD** (ro'yxat, tahrir formasi, jadval, maxfiylik, arxivlash) |
 | [pages/Settings.tsx](web/src/pages/Settings.tsx) 300q | Eslatma vaqtlari, sherik toggle'lari, reytingni o'chirish + **«Jamoa» bo'limi = jamoani boshqarishning yagona joyi:** nomni tahrirlash, a'zolar ro'yxati va ularni chiqarish, taklif kodi (nusxalash, yangilash), jamoadan chiqish. Uchta qaytmas amal ham `confirmUser` so'raydi. Barchasi `/me` dagi `group` blokidan. `onClose` propini oladi |
-| [components/charts.tsx](web/src/components/charts.tsx) 309q | `TrendChart`, `ReasonsChart`, `HabitHeatmap`, `SeriesTable` — SVG, kutubxonasiz |
+| [components/charts.tsx](web/src/components/charts.tsx) | `comparePeople` (**kim taqqoslanadi — sof funksiya**), `TrendChart`, `ReasonsChart`, `HabitHeatmap`, `SeriesTable`, `MembersChart` (admin: jami/faol chiziqlari) |
 | [components/ui.tsx](web/src/components/ui.tsx) | `Card`, `Tiles`, `ProgressBar`, `TaskRow` (vaqt yorlig'i; amal tugmalari `readonly` ga bog'liq emas), `timeRange`, `TaskComposer` (nom + ⏱ bilan ochiladigan vaqt maydonlari — «Bugun» va «Ertaga» da bir xil), `TimeEditor`, `Loading`, `ErrorBox` |
 | [theme.css](web/src/theme.css) 472q | Telegram theme o'zgaruvchilari, barcha stil |
 
@@ -169,6 +174,21 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
    Chiqarish huquqi shu bilan ma'noga ega: kodni yangilagach chiqarilgan odam
    qaytib kira olmaydi. Yolg'iz foydalanuvchi doim o'z jamoasining sardori —
    ya'ni bu qoida yangi odamning ishga kirishishiga xalaqit bermaydi.
+7c. **`is_blocked` va `blocked_at` doim birga o'zgaradi** —
+   `planning.mark_blocked()` orqali, boshqa joyda qo'lda emas. Sanasiz
+   bloklangan odam a'zolar dinamikasida "ketgan" bo'lib ko'rinmaydi:
+   `total` chizig'i to'g'ri, `active` esa jimgina yuqori qoladi. Odam
+   qaytib kelsa (`get_or_create_user`) ikkalasi ham tozalanadi.
+7a. **`SUPER_ADMIN_IDS` bo'sh = hech kimga ruxsat yo'q.** Bo'sh ro'yxatni
+   "tekshiruv o'chirilgan" deb talqin qilish taqiqlanadi: `.env`
+   to'ldirilmagan yoki noto'g'ri yozilgan serverda admin paneli barcha
+   foydalanuvchiga ochilib qolardi va buni hech kim sezmasdi. Tekshiruv —
+   `api/auth.py:is_admin`, test — `tests/test_admin.py`.
+7b. **Grafikda rang ROLGA biriktiriladi, shaxsga emas.** 1 — men, 2 — eng
+   zo'r ketayotgan sherik, 3 — tanlangan odam. Ikkinchi slotdagi odam
+   natijalar o'zgarishi bilan almashadi, ya'ni rangni odamga bog'lab
+   bo'lmaydi. **Shaxsni izoh (legend) ko'rsatadi** — shuning uchun izohni
+   olib tashlash grafikni o'qib bo'lmaydigan qiladi.
 8. **Hash Telegramniki ham.** Mini App ochilganda Telegram hash'ga o'z
    parametrlarini yozadi (`#tgWebAppData=...`, bot havolasida esa
    `#/team&tgWebAppData=...`). `useRoute` shuning uchun birinchi bo'lakni
@@ -199,6 +219,8 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | Yangi ekran | `web/src/pages/` + `App.tsx` dagi `TABS` (5 tadan oshirmang — 375px ekranda yorliqlar o'qilmay qoladi; kam ishlatiladigani ⚙️ oynasiga) |
 | Grafik | `web/src/components/charts.tsx` (SVG qo'lda, kutubxona qo'shma) |
 | Sherik nimani ko'rishi | `services/stats.py:54` |
+| Admin ko'rsatkichi qo'shish | `services/admin.py` (`overview`) → bot `/admin` matni `bot/locales/uz.py` da, Mini App `web/src/pages/Admin.tsx` |
+| Grafikda kim taqqoslanishi | `web/src/components/charts.tsx` (`comparePeople`) |
 | Jamoani boshqarish (nom, kod, a'zo chiqarish, chiqish) | `services/groups.py:153+` → `api/routers/team.py:79+` → **`web/src/pages/Settings.tsx`** (Team.tsx da emas) |
 | Jamoadan chiqish | `services/groups.py:183` → `api/routers/team.py:133` → `web/src/pages/Settings.tsx` |
 
@@ -265,7 +287,7 @@ o'rnatiladi).
 ## 9. Testlar
 
 `python -m pytest` (o'rnatish: `pip install -r requirements-dev.txt`).
-**Serverga chiqarishdan oldin majburiy.** 190 ta test, ~20 soniya.
+**Serverga chiqarishdan oldin majburiy.** 207 ta test, ~35 soniya.
 
 | Fayl | Nimani qo'riqlaydi |
 |---|---|
@@ -280,6 +302,7 @@ o'rnatiladi).
 | [test_integrity.py](tests/test_integrity.py) | Har modul import bo'lishi, `T.NOM` mavjudligi, `.format()` kalitlari matnga mosligi, o'lik matnlar ro'yxati |
 | [test_db.py](tests/test_db.py) | WAL rejimi, `busy_timeout`, ikki sessiyaning parallel yozuvi |
 | [test_task_time.py](tests/test_task_time.py) | `shift_time` sana chegarasi, `fmt_range`, odat vaqtining nusxaga ko'chishi, ro'yxat tartibi, eslatmaning vaqtida ketishi va **har vazifaga bir martadan** (`task_id` ishlashi), `task_lead_min=0`, jadvalning 6-qadami. `soatni_toxtat` fixture'i `clock.now_local` ni qotiradi — aks holda testlar sutkaning qaysi soatida ishga tushirilganiga qarab yiqilardi |
+| [test_admin.py](tests/test_admin.py) | **Ruxsat:** bo'sh `SUPER_ADMIN_IDS` da hech kimga ochilmasligi, admin bo'lmaganga 403, `/me` dagi `is_admin`. **Ko'rsatkichlar:** sherigi bor / yolg'iz, bloklaganlar, faollik, `recent_users` sanasi mahalliy bo'lishi. **Dinamika:** jamg'arma o'sishi, ketganlar `active` dan chiqib `total` da qolishi, **oynadan oldin qo'shilganlar ham hisoblanishi**, qaytib kelgan odam faolga qaytishi. **Ommaviy xabar:** bloklaganlar chetlab o'tilishi, `is_blocked` + `blocked_at` birga qo'yilishi, natija sonlari |
 | [test_extra_tasks.py](tests/test_extra_tasks.py) | **Asosiy qoida:** qo'shimcha foizni, ballni, reytingni va streakni tebratmasligi. Yana: bugun→qo'shimcha / ertaga→reja, o'tgan kunga va o'tgan vaqtga taqiq, qo'shimchadan sabab so'ralmasligi, bugungi rejani o'chirib bo'lmasligi |
 
 `tests/conftest.py` `os.environ` ni **import'lardan oldin** qo'yadi —
@@ -291,7 +314,9 @@ haqiqiy `data/growth.db` ga tegib ketardi.
 **Tugagan:** Faza 1 to'liq — reja, odatlar, eslatmalar, jamoa, reyting,
 statistika, maxfiylik, sardor huquqlari (nom / kod / a'zoni chiqarish),
 jamoadan chiqish. **2026-08-15:** vazifa vaqti (boshlanish–tugash) va
-undan oldingi eslatma, bugungi kunga qo'shimcha vazifalar.
+undan oldingi eslatma, bugungi kunga qo'shimcha vazifalar, taqqoslash
+grafigining tanlanishi, admin panel (bot + Mini App), a'zolar dinamikasi
+va ommaviy xabar.
 
 **Loyiha real ishlatish bosqichiga o'tdi (2026-08-14).** Endi o'zgarishlar
 taxmindan emas, ishlatib ko'rgandan keyin keladi — odatlarning sozlamalardan
@@ -337,6 +362,18 @@ xabarga umuman javob bermaydi.
    maxrajga kiradi — "kasal bo'lgan kun") UI'dan hamon qo'yib bo'lmaydi.
    Foydalanuvchida bunga **boshqacha logika** bor, ataylab qoldirilgan —
    o'zicha "skip tugmasi" qo'shmang, avval so'rang.
+6b. **"Ketganlar" tarixi 2026-08-15 dan boshlanadi.** `blocked_at` shu
+   sanada qo'shildi; undan oldin kim qachon bloklagani hech qachon
+   saqlanmagan va tiklab bo'lmaydi. Migratsiya eskilariga `updated_at` ni
+   taxminiy sana qilib qo'yadi. Ya'ni shu sanadan oldingi "ketganlar"
+   raqamiga ishonmang; keyingisi aniq. **"Ketdi" = botni bloklagan**
+   degani, jamoadan chiqqan emas.
+6a. **Ommaviy xabar faqat botda (2026-08-15).** Mini App'dagi admin paneli
+   — kuzatuv uchun, unda yuborish tugmasi yo'q. Sabab: uzun matnni terib,
+   ko'rinishini tekshirib, tasdiqlash botda tabiiyroq va tasodifan bosib
+   yuborish qiyinroq. Yuborish jarayoni handler ichida ketadi — jarayon
+   restart bo'lsa to'xtaydi; yuz kishigacha bu muammo emas, mingtaga
+   chiqsa navbat (queue) kerak bo'ladi.
 6. **Qo'shimchaga cheklov qo'yilmagan (2026-08-15).** Kuniga nechta va
    qaysi soatda qo'shish mumkinligi cheklanmagan — foydalanuvchining ochiq
    qarori. Bu xavfsiz, chunki qo'shimcha ball bermaydi; agar kelajakda

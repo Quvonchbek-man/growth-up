@@ -56,8 +56,23 @@ async def get_or_create_user(
     if full_name and user.full_name != full_name:
         user.full_name = full_name
     if user.is_blocked:
+        # Qaytib keldi — "ketganlar" hisobidan chiqadi
         user.is_blocked = False
+        user.blocked_at = None
     return user
+
+
+def mark_blocked(user: User) -> None:
+    """Botni bloklaganini belgilaydi — bayroq va sanani BIRGA.
+
+    Ikkalasi doim birga o'zgarishi kerak: sanasiz bloklangan odam a'zolar
+    dinamikasida "ketgan" bo'lib ko'rinmaydi, ya'ni grafik jimgina noto'g'ri
+    bo'ladi. Shuning uchun bu yagona nuqta.
+    """
+    if user.is_blocked and user.blocked_at is not None:
+        return
+    user.is_blocked = True
+    user.blocked_at = clock.now_utc()
 
 
 # ─── Kun va vazifalar ────────────────────────────────────────────────────────

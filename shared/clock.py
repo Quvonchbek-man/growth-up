@@ -69,6 +69,17 @@ def local_date_of(dt: datetime, tz_name: str | None = None) -> date:
     return dt.astimezone(tz_of(tz_name)).date()
 
 
+def day_start_utc(d: date, tz_name: str | None = None) -> datetime:
+    """Mahalliy sananing yarim tuni — UTC `datetime` sifatida.
+
+    `created_at` kabi UTC maydonlarni mahalliy sana bo'yicha filtrlash uchun.
+    Usiz "bugun qo'shilganlar" chegarasi mintaqa farqicha siljiydi
+    (Asia/Tashkent uchun 5 soat) va kechqurun kelgan odam ertangi kunga
+    yozilib qoladi.
+    """
+    return datetime.combine(d, time(0, 0), tzinfo=tz_of(tz_name)).astimezone(UTC)
+
+
 def local_time_of(dt: datetime, tz_name: str | None = None) -> time:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)

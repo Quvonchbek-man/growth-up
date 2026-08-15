@@ -170,6 +170,10 @@ class User(Base, TimestampMixin):
 
     # Bot bloklangan bo'lsa xabar yuborishga urinmaymiz
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    # QACHON bloklagani. Bayroqning o'zi yetmaydi: a'zolar dinamikasida
+    # "shu kuni nechta odam ketdi" degan raqam faqat shu maydondan chiqadi.
+    # Odam qaytib kelsa (`get_or_create_user`) ikkalasi ham tozalanadi.
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     onboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     habits: Mapped[list[Habit]] = relationship(

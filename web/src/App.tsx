@@ -2,6 +2,7 @@ import { useRef } from "react";
 
 import { useRoute } from "./hooks";
 import { haptic } from "./telegram";
+import Admin from "./pages/Admin";
 import Habits from "./pages/Habits";
 import Settings from "./pages/Settings";
 import Stats from "./pages/Stats";
@@ -22,12 +23,19 @@ const TABS = [
 export default function App() {
   const [route, navigate] = useRoute();
 
-  // Sozlamalar tab emas — yopilganda qaysi tabdan kelganini eslab qolamiz
+  // Sozlamalar va admin paneli tab emas — yopilganda qaysi tabdan
+  // kelganini eslab qolamiz
   const lastTab = useRef("today");
-  if (route !== "settings") lastTab.current = route;
+  if (route !== "settings" && route !== "admin") lastTab.current = route;
 
   if (route === "settings") {
     return <Settings onClose={() => navigate(lastTab.current)} />;
+  }
+
+  // Ochiq marshrut, lekin ma'lumotni server faqat adminga beradi (403).
+  // Manzilni qo'lda yozgan odam bo'sh ekran ko'radi, xolos.
+  if (route === "admin") {
+    return <Admin onClose={() => navigate("settings")} />;
   }
 
   return (

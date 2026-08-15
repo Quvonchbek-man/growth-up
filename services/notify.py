@@ -56,7 +56,7 @@ async def safe_send(
     except TelegramForbiddenError:
         # Foydalanuvchi botni bloklagan — boshqa urinmaymiz
         logger.info("Foydalanuvchi %s botni bloklagan", user.id)
-        user.is_blocked = True
+        planning.mark_blocked(user)
         return False
     except TelegramRetryAfter as exc:
         logger.warning("Flood limit: %s soniya kutish kerak", exc.retry_after)

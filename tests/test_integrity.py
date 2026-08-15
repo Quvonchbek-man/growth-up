@@ -78,10 +78,14 @@ def _joy_egalari(matn: str) -> set[str]:
     }
 
 
-def _format_chaqiruvlari() -> list[tuple[str, str, set[str], int]]:
+def _format_chaqiruvlari() -> list[tuple[str, str, set[str], int, bool]]:
     """Kodda uchraydigan `T.NOM.format(...)` chaqiruvlari.
 
-    Qaytaradi: (fayl, matn nomi, berilgan kalitlar, qator).
+    Qaytaradi: (fayl, matn nomi, berilgan kalitlar, qator, yulduzli).
+
+    `yulduzli` — chaqiruvda `**lugat` ishlatilgani. Bunday holatda kalitlarni
+    statik tekshirib bo'lmaydi, ya'ni bu tekshiruv o'sha matn uchun ishlamay
+    qoladi. Shuning uchun uni ruxsat berish emas, **xato deb** hisoblaymiz.
     """
     chaqiruvlar = []
     for path in _modul_fayllari():
@@ -100,8 +104,15 @@ def _format_chaqiruvlari() -> list[tuple[str, str, set[str], int]]:
             ):
                 continue
             kalitlar = {kw.arg for kw in node.keywords if kw.arg}
+            yulduzli = any(kw.arg is None for kw in node.keywords)
             chaqiruvlar.append(
-                (str(path.relative_to(PROJECT)), egasi.attr, kalitlar, node.lineno)
+                (
+                    str(path.relative_to(PROJECT)),
+                    egasi.attr,
+                    kalitlar,
+                    node.lineno,
+                    yulduzli,
+                )
             )
     return chaqiruvlar
 
@@ -120,9 +131,17 @@ def test_format_kalitlari_matnga_mos():
     matnlar = _locale_matnlari()
     xatolar = []
 
-    for fayl, nom, berilgan, qator in _format_chaqiruvlari():
+    for fayl, nom, berilgan, qator, yulduzli in _format_chaqiruvlari():
         if nom not in matnlar:
             xatolar.append(f"{fayl}:{qator} — T.{nom} umuman yo'q")
+            continue
+        if yulduzli:
+            xatolar.append(
+                f"{fayl}:{qator} — T.{nom}.format(**lugat): kalitlarni "
+                "tekshirib bo'lmaydi. Ochiq yozing (kalit=qiymat), aks holda "
+                "matnga yangi {kalit} qo'shilsa xato faqat ishlab chiqarishda "
+                "bilinadi"
+            )
             continue
         kerak = _joy_egalari(matnlar[nom])
         yetishmagan = kerak - berilgan

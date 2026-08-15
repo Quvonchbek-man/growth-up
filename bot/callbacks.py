@@ -34,3 +34,9 @@ class DayCb(CallbackData, prefix="d"):
 
     action: str  # "refresh"
     date: str    # ISO sana
+
+
+class BroadcastCb(CallbackData, prefix="bc"):
+    """Ommaviy xabarni tasdiqlash yoki bekor qilish (faqat admin)."""
+
+    action: str  # "send" | "cancel"

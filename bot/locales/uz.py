@@ -163,6 +163,56 @@ DAY_CLOSED_WEAK = (
     "Bo'ladigan gap. Muhimi — ertaga qaytish."
 )
 
+# ─── Admin (faqat SUPER_ADMIN_IDS) ───────────────────────────────────────────
+
+ADMIN_REPORT = (
+    "🛠 <b>Admin panel</b> — {date}\n\n"
+    "👥 <b>Odamlar</b>\n"
+    "Jami: <b>{total}</b> · bloklagan: {blocked}\n"
+    "Yangi: bugun {new_today} · 7 kun {new_7d} · 30 kun {new_30d}\n\n"
+    "🤝 <b>Sherik</b>\n"
+    "Sherigi bor: <b>{with_partner}</b>\n"
+    "Yolg'iz: <b>{alone}</b>\n"
+    "Jamoalar: {groups} (2+ kishilik: {paired_groups})\n\n"
+    "⚡ <b>Faollik</b>\n"
+    "Bugun reja tasdiqlagan: {submitted_today}\n"
+    "7 kunda faol: {active_7d}\n"
+    "7 kunda ✅ bosgan: {done_7d}\n\n"
+    "📈 <b>Natija (7 kun)</b>\n"
+    "O'rtacha bajarilish: {avg_pct_7d}%\n"
+    "Bajarilgan vazifa: {tasks_done_7d}\n"
+    "Eng uzun streak: {best_streak} kun\n\n"
+    "🔔 Bugun yuborilgan eslatma: {reminders_today}\n\n"
+    "Ommaviy xabar uchun /xabar"
+)
+
+ADMIN_RECENT_TITLE = "\n🆕 <b>Oxirgi qo'shilganlar</b>"
+
+BROADCAST_ASK = (
+    "📣 <b>Ommaviy xabar</b>\n\n"
+    "Yubormoqchi bo'lgan matnni yozing. Telegramning o'z belgilashi "
+    "(qalin, kursiv, havola) saqlanadi.\n\n"
+    "Bekor qilish uchun /bekor"
+)
+BROADCAST_PREVIEW = (
+    "☝️ Xabar shu ko'rinishda <b>{count}</b> kishiga boradi.\n\n"
+    "Yuboraymi?"
+)
+BROADCAST_BAD_TEXT = (
+    "❌ Bu xabarni yuborib bo'lmadi: {error}\n\n"
+    "Ehtimol juda uzun (4096 belgidan ko'p). Qisqartirib qayta yuboring "
+    "yoki /bekor"
+)
+BROADCAST_SENDING = "📤 Yuborilyapti — {count} kishi. Biroz vaqt oladi…"
+BROADCAST_DONE = (
+    "✅ <b>Tayyor</b>\n\n"
+    "Yuborildi: <b>{sent}</b>\n"
+    "Bloklagan: {blocked}\n"
+    "Xato: {failed}"
+)
+BROADCAST_CANCELLED = "Bekor qilindi — hech kimga xabar ketmadi."
+BROADCAST_EMPTY = "Xabar bo'sh. Matn yozing yoki /bekor"
+
 # ─── Xatolar ─────────────────────────────────────────────────────────────────
 
 NO_WEBAPP_URL = (
@@ -181,6 +231,8 @@ BTN_TEAM = "👥 Jamoa"
 BTN_STATS = "📊 Statistika"
 BTN_NUDGE = "👉 Turtki ber"
 BTN_UNDO = "↩️ Bekor qilish"
+BTN_BROADCAST_SEND = "📣 Ha, yuborilsin"
+BTN_BROADCAST_CANCEL = "Bekor"
 
 REASON_BUTTONS = [
     ("tired", "😴 Charchadim"),

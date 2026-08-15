@@ -314,6 +314,14 @@ export default function Settings({ onClose }: { onClose: () => void }) {
             </Card>
           )}
 
+          {/* Faqat bot admini uchun. Tugmani yashirish himoya emas —
+              himoya serverda (`current_admin` 403 qaytaradi). */}
+          {profile.is_admin && (
+            <button className="btn btn--ghost btn--block" onClick={() => navigate("admin")}>
+              🛠 Admin panel
+            </button>
+          )}
+
           <p className="small muted" style={{ textAlign: "center" }}>
             Kun {profile.streak_success_pct}% bajarilsa, streak uzilmaydi.
             <br />

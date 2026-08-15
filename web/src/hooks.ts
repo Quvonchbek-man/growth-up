@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * Mavjud marshrutlar. `App.tsx` dagi `TABS` shu ro'yxatning ichida bo'lishi
- * kerak (`settings` tab emas, lekin marshrut sifatida bor).
+ * kerak (`settings` va `admin` tab emas, lekin marshrut sifatida bor).
  */
-export const ROUTES = ["today", "tomorrow", "team", "stats", "habits", "settings"];
+export const ROUTES = ["today", "tomorrow", "team", "stats", "habits", "settings", "admin"];
 
 /**
  * Hash-marshrutlash (`/#/today`).

@@ -10,7 +10,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.callbacks import NudgeCb, ReasonCb, TaskCb
+from bot.callbacks import BroadcastCb, NudgeCb, ReasonCb, TaskCb
 from bot.locales import uz as T
 from shared.config import settings
 from shared.models import Task, TaskStatus
@@ -82,6 +82,23 @@ def reason_choices(task_id: int) -> InlineKeyboardMarkup:
             callback_data=ReasonCb(task_id=task_id, reason=value).pack(),
         )
     kb.adjust(2)
+    return kb.as_markup()
+
+
+def broadcast_confirm() -> InlineKeyboardMarkup:
+    """Ommaviy xabar tasdig'i.
+
+    Tugmasiz yuborib bo'lmaydi: bu qaytarib bo'lmaydigan amal — yuborilgan
+    xabarni hamma foydalanuvchidan o'chirib bo'lmaydi.
+    """
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text=T.BTN_BROADCAST_SEND, callback_data=BroadcastCb(action="send").pack()
+    )
+    kb.button(
+        text=T.BTN_BROADCAST_CANCEL, callback_data=BroadcastCb(action="cancel").pack()
+    )
+    kb.adjust(1)
     return kb.as_markup()
 
 

@@ -133,6 +133,35 @@ export interface Me {
   notify_about_partner: boolean;
   show_ranking: boolean;
   streak_success_pct: number;
+  /** Bot admini — sozlamalarda «Admin panel» tugmasi shunga qarab chiqadi */
+  is_admin: boolean;
+}
+
+/** Butun bot bo'yicha ko'rsatkichlar. Faqat adminga beriladi. */
+export interface AdminView {
+  date: string;
+  days: number;
+  users: {
+    total: number;
+    blocked: number;
+    new_today: number;
+    new_7d: number;
+    new_30d: number;
+  };
+  teams: { with_partner: number; alone: number; groups: number; paired_groups: number };
+  activity: { submitted_today: number; active_7d: number; done_7d: number };
+  results: { avg_pct_7d: number; tasks_done_7d: number; best_streak: number };
+  reminders_today: number;
+  /** A'zolar dinamikasi: jamg'arma jami/faol va kunlik qo'shilgan/ketgan */
+  members: { date: string; total: number; active: number; joined: number; left: number }[];
+  recent: {
+    user_id: number;
+    name: string;
+    username: string | null;
+    joined: string | null;
+    has_partner: boolean;
+    is_blocked: boolean;
+  }[];
 }
 
 export interface PartnerCard {
@@ -243,4 +272,7 @@ export const api = {
     post<{ ok: boolean }>("/team/react", { target_user_id: targetUserId, emoji }),
 
   stats: (days = 30) => get<StatsView>(`/stats?days=${days}`),
+
+  /** Admin bo'lmasa 403 qaytadi — tekshiruv serverda */
+  admin: (days = 30) => get<AdminView>(`/admin/overview?days=${days}`),
 };
