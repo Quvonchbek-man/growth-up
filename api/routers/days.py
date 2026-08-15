@@ -5,13 +5,14 @@ from __future__ import annotations
 from datetime import date as date_type
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import current_user, get_session
-from api.schemas import TaskCreate, TaskMove, TaskStatusUpdate, TaskTime
+from api.schemas import HabitTaskCreate, TaskCreate, TaskMove, TaskStatusUpdate, TaskTime
 from services import planning, stats, streak
 from shared import clock
-from shared.models import User
+from shared.models import Habit, Task, User
 
 router = APIRouter(tags=["days"])
 
@@ -91,6 +92,47 @@ async def create_task(
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return await _day_payload(session, user, d)
+
+
+@router.post("/day/{day}/habits", status_code=status.HTTP_201_CREATED)
+async def create_habit_task(
+    day: str,
+    payload: HabitTaskCreate,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Odatni jadvalida yo'q kunga qo'lda qo'shadi.
+
+    Faqat KELAJAKDAGI kunga: bugungi reja kechqurun berilgan va'da, unga
+    kun ichida odat qo'shish foizni ko'tarishning yo'li bo'lardi. Bugun
+    uchun erkin matnli qo'shimcha bor (`POST /day/{day}/tasks`).
+    """
+    d = _resolve(day, user)
+    if d <= clock.today_local(user.tz):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Odatni faqat kelajakdagi rejaga qo'shish mumkin. Bugunga "
+            "qo'shmoqchi bo'lsangiz — qo'shimcha vazifa sifatida yozing",
+        )
+
+    habit = await session.get(Habit, payload.habit_id)
+    if habit is None or habit.user_id != user.id or habit.is_archived:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Odat topilmadi")
+
+    duplicate = await session.scalar(
+        select(Task.id).where(
+            Task.user_id == user.id,
+            Task.date == d,
+            Task.habit_id == habit.id,
+        )
+    )
+    if duplicate is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Bu odat allaqachon ro'yxatda"
+        )
+
+    await planning.add_habit_task(session, user, d, habit)
     return await _day_payload(session, user, d)
 
 

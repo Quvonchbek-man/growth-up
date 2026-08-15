@@ -24,6 +24,12 @@ class TaskCreate(BaseModel):
     end_time: time | None = None
 
 
+class HabitTaskCreate(BaseModel):
+    """Odatni jadvalida yo'q kunga qo'lda qo'shish. Qolgan maydonlar odatdan."""
+
+    habit_id: int
+
+
 class TaskStatusUpdate(BaseModel):
     status: TaskStatus
     reason: MissReason | None = None

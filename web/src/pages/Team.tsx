@@ -205,7 +205,7 @@ function Invite({
 
   return (
     <div className="page">
-      <h1>Sherik qo'shing</h1>
+      <h1>Do'st qo'shing</h1>
 
       <Card>
         <p style={{ marginTop: 0 }}>
@@ -213,13 +213,13 @@ function Invite({
           <strong>rejangizni boshqa odam ko'rib turadi</strong>.
         </p>
         <p className="small muted" style={{ marginBottom: 0 }}>
-          O'zingizga bergan va'dani tashlab yuborish oson. Sherigingiz ko'rib
+          O'zingizga bergan va'dani tashlab yuborish oson. Do'stingiz ko'rib
           turganda esa — yo'q. Shuning uchun birinchi qadam shu.
         </p>
       </Card>
 
       {inviteCode && (
-        <Card title="Sherikni chaqirish">
+        <Card title="Do'stni chaqirish">
           <div className="row row--between">
             <span className="code">{inviteCode}</span>
             <button
@@ -234,7 +234,7 @@ function Invite({
             </button>
           </div>
           <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
-            Shu kodni sherigingizga bering. U botda <code>/qoshil {inviteCode}</code>{" "}
+            Shu kodni do'stingizga bering. U botda <code>/qoshil {inviteCode}</code>{" "}
             deb yozsa, jamoangizga qo'shiladi.
           </p>
         </Card>
@@ -242,7 +242,7 @@ function Invite({
 
       <Card title="Yoki sizni chaqirishgan bo'lsa">
         <p className="small muted" style={{ marginTop: 0 }}>
-          Sherigingizning kodini kiriting — uning jamoasiga qo'shilasiz.
+          Do'stingizning kodini kiriting — uning jamoasiga qo'shilasiz.
         </p>
         <div className="row">
           <input

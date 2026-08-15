@@ -104,7 +104,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
     const ok = await confirmUser(
       `«${group.name}» jamoasidan chiqasizmi?\n\n` +
         (group.is_owner ? "Sardorlik jamoadagi eng eski a'zoga o'tadi.\n" : "") +
-        "Sherigingizga xabar boradi. Rejalaringiz, odatlaringiz va statistikangiz " +
+        "Do'stingizga xabar boradi. Rejalaringiz, odatlaringiz va statistikangiz " +
         "saqlanib qoladi, lekin qaytish uchun yangi taklif kodi kerak bo'ladi.",
     );
     if (!ok) return;
@@ -176,15 +176,15 @@ export default function Settings({ onClose }: { onClose: () => void }) {
             </label>
           </Card>
 
-          <Card title="Sherik bilan">
+          <Card title="Do'st bilan">
             <Toggle
-              label="Reja kiritmasam, sherigimga xabar ketsin"
+              label="Reja kiritmasam, do'stimga xabar ketsin"
               hint="Ilovaning asosiy kuchi shu bosimda"
               checked={profile.allow_nag_about_me}
               onChange={(value) => void save({ allow_nag_about_me: value })}
             />
             <Toggle
-              label="Sherigim bajarmasa menga xabar kelsin"
+              label="Do'stim bajarmasa menga xabar kelsin"
               checked={profile.notify_about_partner}
               onChange={(value) => void save({ notify_about_partner: value })}
             />
@@ -203,7 +203,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
                   <span className="spread">
                     {profile.group.name}
                     <div className="small muted">
-                      {profile.group.partner_count} sherik
+                      {profile.group.partner_count} do'st
                       {profile.group.is_owner && " · siz sardorsiz"}
                     </div>
                   </span>
@@ -282,7 +282,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
                     </button>
                   </div>
                   <p className="small muted" style={{ marginTop: 8 }}>
-                    Sherigingiz botda <code>/qoshil {profile.group.invite_code}</code>{" "}
+                    Do'stingiz botda <code>/qoshil {profile.group.invite_code}</code>{" "}
                     deb yozsa qo'shiladi.
                   </p>
                   <button
@@ -307,7 +307,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
                     Jamoadan chiqish
                   </button>
                   <p className="small muted" style={{ marginBottom: 0 }}>
-                    Sherigingizga xabar boradi. Tarixingiz o'chmaydi.
+                    Do'stingizga xabar boradi. Tarixingiz o'chmaydi.
                   </p>
                 </>
               )}

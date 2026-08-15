@@ -54,16 +54,16 @@ export default function Admin({ onClose }: { onClose: () => void }) {
 
       {/* Ilovaning butun qiymati sherikda: yolg'iz odam ertami-kechmi
           tashlab ketadi. Shuning uchun bu raqam eng tepada. */}
-      <Card title="Sherik holati">
+      <Card title="Do'st holati">
         <Tiles
           items={[
-            { value: teams.with_partner, label: "sherigi bor" },
+            { value: teams.with_partner, label: "do'sti bor" },
             { value: teams.alone, label: "yolg'iz" },
-            { value: `${sherikUlushi}%`, label: "sherik topgan" },
+            { value: `${sherikUlushi}%`, label: "do'st topgan" },
           ]}
         />
         <p className="small muted" style={{ marginBottom: 0, marginTop: 8 }}>
-          Yolg'izlar ulushi o'sib borsa — muammo jalb qilishda emas, sherik
+          Yolg'izlar ulushi o'sib borsa — muammo jalb qilishda emas, do'st
           topishda. {teams.groups} ta jamoa, shundan {teams.paired_groups} tasi
           2+ kishilik.
         </p>
@@ -145,7 +145,7 @@ export default function Admin({ onClose }: { onClose: () => void }) {
           </table>
         )}
         <p className="small muted" style={{ marginBottom: 0, marginTop: 8 }}>
-          🤝 sherigi bor · 👤 yolg'iz · 🚫 botni bloklagan
+          🤝 do'sti bor · 👤 yolg'iz · 🚫 botni bloklagan
         </p>
       </Card>
 

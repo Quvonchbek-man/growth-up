@@ -8,9 +8,9 @@ import { alertUser, notify } from "../telegram";
 const WEEKDAYS = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"];
 
 const VISIBILITY_OPTIONS: { value: Visibility; label: string; hint: string }[] = [
-  { value: "public", label: "Ochiq", hint: "Sherik nomini ham, holatini ham ko'radi" },
+  { value: "public", label: "Ochiq", hint: "Do'stingiz nomini ham, holatini ham ko'radi" },
   { value: "stats_only", label: "Faqat foiz", hint: "Nomi yashirin, foizga qo'shiladi" },
-  { value: "private", label: "Yashirin", hint: "Sherik ko'rmaydi, reytingga kirmaydi" },
+  { value: "private", label: "Yashirin", hint: "Do'stingiz ko'rmaydi, reytingga kirmaydi" },
 ];
 
 const EMPTY_HABIT: Partial<Habit> = {
@@ -302,7 +302,7 @@ export default function Habits() {
 
           <div style={{ marginBottom: 12 }}>
             <div className="small muted" style={{ marginBottom: 6 }}>
-              Sherik nimani ko'radi
+              Do'stingiz nimani ko'radi
             </div>
             {VISIBILITY_OPTIONS.map((option) => (
               <label

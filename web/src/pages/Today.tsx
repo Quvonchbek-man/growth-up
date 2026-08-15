@@ -71,9 +71,9 @@ export default function Today() {
         <Card>
           <div className="row row--between" style={{ gap: 10 }}>
             <span className="spread">
-              <strong>Sherigingiz yo'q</strong>
+              <strong>Do'stingiz yo'q</strong>
               <div className="small muted">
-                Ilovaning asosiy kuchi — sherik ko'rib turishida.
+                Ilovaning asosiy kuchi — do'stingiz ko'rib turishida.
               </div>
             </span>
             <button className="btn btn--small" onClick={() => navigate("team")}>

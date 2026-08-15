@@ -6,8 +6,8 @@
 > yoki servis funksiyasi o'zgarsa, qaror qabul qilinsa). Qator raqamlari
 > taxminiy — ular bo'yicha `offset` bilan o'qish mumkin, lekin tekshirib ol.
 >
-> Oxirgi yangilangan: 2026-08-15 (vazifa vaqti + eslatma, qo'shimchalar,
-> taqqoslash grafigi, admin panel) · Faza 1 tugagan
+> Oxirgi yangilangan: 2026-08-15 (odat jadvalining sinxronlanishi,
+> tasdiqlash tugmasining joyi) · Faza 1 tugagan
 
 ---
 
@@ -69,7 +69,7 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 
 | Fayl | Asosiy funksiyalar |
 |---|---|
-| [planning.py](services/planning.py) | `get_or_create_user`, `_generate_habit_tasks` (odatdan kunlik vazifa, **vaqtni ham ko'chiradi**), `open_day`, `recalc_day`, `get_task`, `get_tasks` (**tartib: vaqtlilar avval, vaqtsizlari oxirida**), `add_task` (`start_time`/`end_time`/`is_extra`), `set_task_time`, `set_status`, `set_miss_reason`, `move_task` (**`user` obyektini oladi**, `user_id` emas), `submit_plan`, `close_day`, `missed_tasks_without_reason` (qo'shimchani chiqarib tashlaydi) |
+| [planning.py](services/planning.py) | `get_or_create_user`, **`_sync_habit_tasks`** (odat jadvaliga moslash — yaratadi **va** jadvaldan chiqqanini o'chiradi, **vaqtni ham ko'chiradi**), `open_day`, `recalc_day`, `get_task`, `get_tasks` (**tartib: vaqtlilar avval, vaqtsizlari oxirida**), `add_task` (`start_time`/`end_time`/`is_extra`), **`add_habit_task`** (odatni jadvalida yo'q kunga qo'lda qo'shish — `MANUAL` + `habit_id`), `set_task_time`, `set_status`, `set_miss_reason`, `move_task` (**`user` obyektini oladi**, `user_id` emas; `habit_id` li vazifani ko'chirmaydi), `submit_plan`, `close_day`, `missed_tasks_without_reason` (qo'shimchani chiqarib tashlaydi) |
 | [stats.py](services/stats.py) | **Maxfiylik shu yerda qo'llanadi:** `visible_to_partner`, `serialize_task`. Yana: `day_view`, `partner_cards`, `daily_series`, `reason_breakdown`, `habit_matrix`, `leaderboard` (**`is_extra` filtri shu yerda qo'lda yozilgan**), `week_leaderboard` |
 | [notify.py](services/notify.py) | Barcha Telegram xabarlari: `safe_send` (blok/xatoni yutadi), `already_sent/mark_sent` (idempotentlik, `task_id` bilan), `send_plan_reminder`, `send_digest` (qatorlarda vaqt), **`send_task_reminders`** (vazifa boshlanishidan oldin), `nag_partners_about`, `close_and_summarize`, `ask_reasons`, `send_nudge`, `notify_removed`, `notify_left` |
 | [scheduler.py](services/scheduler.py) | `fire_due_for` — 5 belgilangan qadam **shu tartibda**: kun_yopish → sabab → ertalabki → kechki → sherikka, keyin **6-qadam: vazifa eslatmalari** (vaqti yo'q — tekshiruv `notify` ichida). `tick` (har foydalanuvchi alohida sessiya), `run_forever` |
@@ -86,6 +86,7 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 | `GET /me` · `PATCH /me` | [user_settings.py:50,62](api/routers/user_settings.py) — javobda `group` bloki ham bor (nom, `partner_count`, `is_owner`, `invite_code` — kod faqat sardorga) |
 | `GET /day/{day}` | [days.py:28](api/routers/days.py) — `day` = `today`/`tomorrow`/ISO sana |
 | `POST /day/{day}/tasks` | days.py — **qo'shimcha/reja qarori shu yerda**: `is_extra = (kun == bugun)`. O'tgan kun → 400, bugungi qo'shimchaga o'tgan vaqt → 400 |
+| `POST /day/{day}/habits` | days.py — odatni **jadvalida yo'q kunga** qo'lda qo'shish. Faqat kelajakdagi kun (bugun/o'tmish → 400), begona/arxiv odat → 404, takror → 400 |
 | `POST /day/{day}/submit` | days.py:69 |
 | `PATCH /tasks/{id}` · `POST /tasks/{id}/move` · `POST /tasks/{id}/time` · `DELETE /tasks/{id}` | days.py — `DELETE` bugungi **rejani** o'chirtirmaydi (qo'shimchani o'chirsa bo'ladi) |
 | `GET/POST /habits` · `PUT/DELETE /habits/{id}` | [habits.py:32,45,75,114](api/routers/habits.py) (DELETE = arxivlash) |
@@ -127,10 +128,10 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
 |---|---|
 | [App.tsx](web/src/App.tsx) | 5 ta tab: `today`/`tomorrow`/`team`/`stats`/`habits`. **`settings` tab emas** — har sahifada suzib turgan ⚙️ (`.iconbtn--float`) ochadigan yaxlit oyna; yopilganda `lastTab` orqali kelgan tabga qaytadi |
 | [api.ts](web/src/api.ts) | Barcha TS tiplari + `api` obyekti (oxirida) — endpoint o'zgarsa shu yer |
-| [telegram.ts](web/src/telegram.ts) | `tg`, `initTelegram`, `haptic`, `alertUser`, `confirmUser` (qaytarib bo'lmaydigan amallar uchun), `showMainButton`, `showBackButton` (sozlamalar oynasini yopadi) |
+| [telegram.ts](web/src/telegram.ts) | `tg`, `initTelegram`, `haptic`, `alertUser`, `confirmUser` (qaytarib bo'lmaydigan amallar uchun), **`popupConfirm`** (tugmalari o'z matniga ega tasdiq), `showBackButton` (sozlamalar oynasini yopadi). **`showMainButton` yo'q** — §5.10 ga qarang |
 | [hooks.ts](web/src/hooks.ts) | `ROUTES` (barcha marshrutlar), `useRoute` (hash router — Telegram parametrlarini ajratadi), `useAsync` |
 | [pages/Today.tsx](web/src/pages/Today.tsx) | **Ikki bo'lim: «Reja» va «Qo'shimcha».** Rejada faqat ✅ (qulf saqlanadi), qo'shimchada ✅ + ✕ + kiritish qatori. Sherigi yo'q bo'lsa tepada Jamoa tabiga yo'llovchi kartochka |
-| [pages/Tomorrow.tsx](web/src/pages/Tomorrow.tsx) | Reja kiritish (vaqt bilan), vazifa vaqtini joyida tahrirlash, submit |
+| [pages/Tomorrow.tsx](web/src/pages/Tomorrow.tsx) | Reja kiritish (vaqt bilan), vazifa vaqtini joyida tahrirlash, submit. **Tasdiqlash tugmasi tepada** (§5.10) va `popupConfirm` so'raydi. **«Odatlardan qo'shish»** — ertangi jadvalga tushmagan odatlar (ro'yxatda yo'qlari), bir bosishda qo'shiladi |
 | [pages/Team.tsx](web/src/pages/Team.tsx) 300q | **Faqat kunlik ko'rinish:** sherik kartochkalari, ularning bugungi ro'yxati, reaksiya, turtki, haftalik reyting. Boshqaruv amallari yo'q — hammasi sozlamalarda. **Sherigi yo'q bo'lsa butun sahifa `Invite` ekraniga almashadi** (nega sherik kerak + kod + qo'shilish) |
 | [pages/Stats.tsx](web/src/pages/Stats.tsx) | Grafiklarni yig'adi. Taqqoslash uchun tanlangan sherik `localStorage` da (`growth:taqqoslash`) — serverda emas, chunki bu ko'rinish sozlamasi |
 | [pages/Admin.tsx](web/src/pages/Admin.tsx) | **Bot admini uchun kuzatuv ekrani.** Tab emas — sozlamalardagi tugmadan ochiladi. Ommaviy xabar bu yerda yo'q (botda) |
@@ -147,6 +148,13 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
    `shared/clock.py` dan.
 2. **Habit = shablon, Task = o'sha kunning nusxasi.** Odat o'zgarsa o'tmish
    o'zgarmaydi. Odat **o'chirilmaydi — arxivlanadi**.
+2a. **`source` nusxani KIM yaratganini aytadi, `habit_id` esa NIMA ekanini.**
+   `HABIT` = jadval yaratdi (foydalanuvchi uni rejadan olib tashlay olmaydi,
+   jadvaldan chiqsa o'zi yo'qoladi); `MANUAL` + `habit_id` = odam o'zi
+   qo'shdi (✕ bilan o'chiriladi, `_sync_habit_tasks` unga tegmaydi).
+   Shuning uchun odat nusxasini qidiruvchi shart `source` emas, **`habit_id`
+   bo'yicha** yozilishi kerak (`move_task` dagi kabi) — aks holda qo'lda
+   qo'shilgani `UNIQUE(user_id, date, habit_id)` ga urilib ketadi.
 3. **Biznes-logika `services/` da.** Bot va API — faqat qobiq.
 4. **Maxfiylik bitta joyda:** `services/stats.py:54-77`. `private` odat
    sherikka ham, umumiy foizga ham, **reyting baliga ham** kirmaydi — aks
@@ -202,11 +210,25 @@ Batafsil foydalanuvchi hujjati: [README.md](README.md) (ishga tushirish,
    sherigi shunchaki dangasalik qilyapti deb haftalab kutib yuraveradi —
    accountability ilovasi uchun bu eng yomon holat. Sardor chiqsa sardorlik
    eng eski a'zoga o'tadi; jamoa hech qachon boshqaruvsiz qolmaydi.
+10. **Telegram'ning `MainButton`'i ishlatilmaydi (2026-08-15).** U webview'ning
+   TASHQARISIDA, tab qatorining aynan tagida chiziladi — «Ertaga» tabini
+   bosgan barmoq «Rejani tasdiqlash» ga tegib ketardi va tasdiqni qaytarish
+   yo'li yo'q (`submit_plan` faqat qo'yadi). Tugma endi sahifaning tepasida,
+   ogohlantirish blokidan oldin, ustiga `popupConfirm` so'raydi. Yangi ekranga
+   ham `MainButton` qo'shmang — o'sha tuzoq qaytadi.
+11. **SDK metodi «bor» degani «ishlaydi» degani emas.** `showPopup` va
+   `showConfirm` — Bot API 6.2 dan; eski mijozda ular obyektda ko'rinadi,
+   lekin chaqirilganda `WebAppMethodUnsupported` deb **otiladi**. Shu sabab
+   ular `telegram.ts` dagi `askViaSdk` orqali chaqiriladi: u xatoni ushlab
+   `undefined` qaytaradi va chaqiruvchi brauzer muloqotiga tushadi. To'g'ridan
+   `new Promise` ichida chaqirsangiz xato `reject` ga aylanadi — tugma
+   bosiladi, hech narsa bo'lmaydi va konsolga qaramaguningizcha bilmaysiz.
 
 ## 6. Vazifa → qayerga qarash
 
 | Nima qilmoqchiman | Qayerga |
 |---|---|
+| Odat qaysi kunlarda chiqishi | `shared/models.py` (`Habit.is_active_on`) → `services/planning.py` (`_sync_habit_tasks`) — **ikkalasi birga**, faqat tekshiruv yetmaydi |
 | Yangi jadval / maydon | `shared/models.py` → yangi baza uchun `scripts/init_db.py`, **mavjud bazani yangilash uchun migratsiya skripti** (naqsh: `scripts/migrate_002_time.py` — idempotent `ADD COLUMN`, `UNIQUE` o'zgarsa jadvalni qayta qurish) |
 | Yangi `.env` sozlamasi | `shared/config.py:28` + `.env.example` + README jadvali |
 | Ball / foiz formulasi | `services/scoring.py` (yagona joy) |
@@ -303,6 +325,7 @@ o'rnatiladi).
 | [test_db.py](tests/test_db.py) | WAL rejimi, `busy_timeout`, ikki sessiyaning parallel yozuvi |
 | [test_task_time.py](tests/test_task_time.py) | `shift_time` sana chegarasi, `fmt_range`, odat vaqtining nusxaga ko'chishi, ro'yxat tartibi, eslatmaning vaqtida ketishi va **har vazifaga bir martadan** (`task_id` ishlashi), `task_lead_min=0`, jadvalning 6-qadami. `soatni_toxtat` fixture'i `clock.now_local` ni qotiradi — aks holda testlar sutkaning qaysi soatida ishga tushirilganiga qarab yiqilardi |
 | [test_admin.py](tests/test_admin.py) | **Ruxsat:** bo'sh `SUPER_ADMIN_IDS` da hech kimga ochilmasligi, admin bo'lmaganga 403, `/me` dagi `is_admin`. **Ko'rsatkichlar:** sherigi bor / yolg'iz, bloklaganlar, faollik, `recent_users` sanasi mahalliy bo'lishi. **Dinamika:** jamg'arma o'sishi, ketganlar `active` dan chiqib `total` da qolishi, **oynadan oldin qo'shilganlar ham hisoblanishi**, qaytib kelgan odam faolga qaytishi. **Ommaviy xabar:** bloklaganlar chetlab o'tilishi, `is_blocked` + `blocked_at` birga qo'yilishi, natija sonlari |
+| [test_habit_schedule.py](tests/test_habit_schedule.py) | **Tanlangan kunlar qat'iy bajarilishi:** jadval toraysa nusxaning yo'qolishi, kengaysa paydo bo'lishi, `DONE` va o'tmishga tegilmasligi, `PUT /habits/{id}` javobida ertangi rejaning to'g'ri bo'lishi. **Qo'lda qo'shish:** `MANUAL` nusxaning tozalanmasligi, rejaga (qo'shimchaga emas) kirishi, takror/bugun/o'tmish/begona holatlarining rad etilishi. API testlari `men` fixture'ini ishlatadi va tayyorgarlikni **commit** qiladi (aks holda SQLite `database is locked`) |
 | [test_extra_tasks.py](tests/test_extra_tasks.py) | **Asosiy qoida:** qo'shimcha foizni, ballni, reytingni va streakni tebratmasligi. Yana: bugun→qo'shimcha / ertaga→reja, o'tgan kunga va o'tgan vaqtga taqiq, qo'shimchadan sabab so'ralmasligi, bugungi rejani o'chirib bo'lmasligi |
 
 `tests/conftest.py` `os.environ` ni **import'lardan oldin** qo'yadi —
@@ -316,7 +339,8 @@ statistika, maxfiylik, sardor huquqlari (nom / kod / a'zoni chiqarish),
 jamoadan chiqish. **2026-08-15:** vazifa vaqti (boshlanish–tugash) va
 undan oldingi eslatma, bugungi kunga qo'shimcha vazifalar, taqqoslash
 grafigining tanlanishi, admin panel (bot + Mini App), a'zolar dinamikasi
-va ommaviy xabar.
+va ommaviy xabar. **Shu kuni kechroq:** odat jadvalining sinxronlanishi,
+tasdiqlash tugmasining joyi va tasdiq oynasi, «Odatlardan qo'shish».
 
 **Loyiha real ishlatish bosqichiga o'tdi (2026-08-14).** Endi o'zgarishlar
 taxmindan emas, ishlatib ko'rgandan keyin keladi — odatlarning sozlamalardan
@@ -336,6 +360,48 @@ uzilganini foydalanuvchiga hech kim aytmaydi; `UNKNOWN_COMMAND` — bot notanish
 xabarga umuman javob bermaydi.
 
 **Hal qilinmagan:**
+0a. **Tasdiqlangan rejaga hamon odat qo'shsa bo'ladi (topilgan 2026-08-15,
+   KEYINGI YANGILANISHDA hal qilinadi).** «Odatlardan qo'shish» bo'limi
+   `submitted` holatini umuman tekshirmaydi — reja tasdiqlangandan keyin
+   ham ko'rinib turadi va `POST /day/{day}/habits` uni qabul qiladi.
+   Bu §5a ning o'sha buzilishi: tasdiq — berilgan va'da, undan keyin
+   rejaga qo'shilgan ish maxrajni o'zgartiradi. **Yechim ikki qavatda:**
+   (1) `Tomorrow.tsx` da `submitted` bo'lsa butun kartochka chizilmasin;
+   (2) endpoint 400 qaytarsin (`planning.has_submitted_plan_for` allaqachon
+   bor) — faqat frontendni yashirish yetmaydi, aks holda qoida tekshirilmay
+   qoladi. **Bir vaqtda hal qilinsin:** erkin matnli «Qo'shimcha vazifa»
+   ham ertangi tasdiqlangan rejaga qo'shilaveradi (`POST /day/{day}/tasks`)
+   — bir xil teshik, bir xil yechim. Test: tasdiqlangandan keyin ikkala
+   endpoint ham 400.
+0b. **Baza o'sishi va serverning to'lib qolishi — TAHLIL kerak.**
+   Hech qanday tozalash yo'q: `tasks` har kuni har odam uchun 5–10 qator,
+   `reminder_logs` har eslatmaga bitta, `nudges`/`reactions` cheksiz
+   to'planadi, `data/backups/` da 30 kunlik nusxa (har biri butun baza),
+   WAL fayli esa `-wal` bo'lib o'sib boradi. Server — 1 yadro / 1 GB,
+   ya'ni disk ham, xotira ham tor. **Avval o'lchash, keyin qirqish:**
+   jadval-jadval qator soni va fayl hajmi (`sqlite3 growth.db
+   "SELECT COUNT(*) …"`, `PRAGMA page_count`), 100 va 1000 foydalanuvchida
+   bir yillik prognoz. **Ehtimoliy chora:** `reminder_logs` ni 60 kundan
+   eskisini o'chirish (u faqat "bugun yubordikmi?" uchun kerak — tarixiy
+   qiymati yo'q), `nudges`/`reactions` ni 6 oydan keyin, zaxira sonini
+   30 dan 14 ga tushirish + `VACUUM`. **`tasks`/`daily_plans` ga
+   tegilmaydi** — ular statistikaning o'zi. Ishga tushirish: kunlik
+   zaxira skripti yonida, `deploy/` da cron.
+0. **Birinchi ochilishda 500 — `UNIQUE constraint failed: users.id`
+   (topilgan 2026-08-15, KEYINGI YANGILANISHDA hal qilinadi).** Mini App
+   ochilganda bir nechta so'rov bir vaqtda ketadi (`/me`, `/day/today`,
+   `/team`…), har biri `current_user` → `planning.get_or_create_user` ni
+   chaqiradi. Foydalanuvchi hali bazada bo'lmasa, hammasi "yo'q ekan"
+   deb ko'radi va hammasi INSERT qiladi — biri o'tadi, qolganlari
+   yiqiladi. Faqat **eng birinchi** ochilishda ko'rinadi (sahifani
+   yangilash yetadi), shuning uchun sinovda deyarli hech qachon
+   uchramaydi — lekin bu aynan yangi odamning birinchi taassuroti.
+   **Yechim:** `planning.get_or_create_user:50` dagi `flush` ni
+   `IntegrityError` uchun `try/except` ga o'rab, xato bo'lsa
+   `session.rollback()` qilib qayta `SELECT` qilish (INSERT ... ON
+   CONFLICT emas: SQLite'da ham, kelajakdagi Postgres'da ham bir xil
+   ishlashi kerak). Test: bitta foydalanuvchi uchun bir nechta parallel
+   so'rov (`asyncio.gather`) — hammasi 200 qaytarishi shart.
 1. **Raqobat.** Men yumshoq "jamoa natijasi"ni tavsiya qilgandim, foydalanuvchi
    ball+reytingni tanladi. Xavf: 2 kishida ortda qolgan uyalib qochadi.
    Yumshatish: `show_ranking` sozlamasi + formulaning `scoring.py` da ajratilgani.

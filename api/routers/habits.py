@@ -118,7 +118,10 @@ async def update_habit(
     await session.flush()
 
     # O'tmishdagi vazifalar ATAYLAB o'zgarmaydi — tarix o'zgarmas bo'lishi kerak.
-    # Faqat hali bajarilmagan kelajakdagi nusxalar yangilanadi.
+    # Faqat hali bajarilmagan kelajakdagi nusxalar yangilanadi. Jadval
+    # o'zgargani (kun qo'shilishi yoki chiqib qolishi) shu yerda emas,
+    # `planning._sync_habit_tasks` da hal bo'ladi — quyidagi `open_day` uni
+    # ertangi kun uchun darhol ishga tushiradi.
     today = clock.today_local(user.tz)
     future = await session.scalars(
         select(Task).where(
@@ -136,6 +139,9 @@ async def update_habit(
         task.end_time = habit.end_time
         await planning.recalc_day(session, user.id, task.date)
 
+    # Jadval o'zgarishi ertangi rejada darhol ko'rinsin: kun qo'shilgan
+    # bo'lsa nusxa yaratiladi, chiqib qolgan bo'lsa olib tashlanadi.
+    await planning.open_day(session, user, clock.tomorrow_local(user.tz))
     return _serialize(habit)
 
 

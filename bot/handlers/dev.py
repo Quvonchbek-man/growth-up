@@ -76,7 +76,7 @@ async def show_time(message: Message, user: User, is_admin: bool) -> None:
         f"Sun'iy siljish: <code>{settings.dev_time_shift_minutes} daqiqa</code>\n\n"
         f"Kechki eslatma: {user.plan_reminder_at or settings.plan_reminder_time}\n"
         f"Ertalabki: {user.digest_at or settings.digest_time}\n"
-        f"Sherikka: {settings.nag_time}\n"
+        f"Do'stga: {settings.nag_time}\n"
         f"Kun yopilishi: {settings.day_close_time}\n"
         f"Vazifadan oldin: {user.task_lead_min} daqiqa"
         + (" (o'chirilgan)" if user.task_lead_min <= 0 else "")

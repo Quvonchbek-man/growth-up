@@ -35,9 +35,15 @@ export const SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--serie
 
 const AXIS_TICK = { fill: "var(--ink-muted)", fontSize: 11 };
 
+/**
+ * "2026-08-15" → "15.08". Nol ATAYLAB olib tashlanmaydi: "15.8" ni odam
+ * o'qiyotganda oyning raqamimi yoki yana nimadir ekani darrov tushunilmaydi,
+ * ayniqsa yonida "1.8" turganda. Ikkalasi ham ikki raqamli bo'lsa naqsh
+ * ko'rinib turadi.
+ */
 function shortDate(iso: string): string {
   const [, month, day] = iso.split("-");
-  return `${Number(day)}.${Number(month)}`;
+  return `${day}.${month}`;
 }
 
 // ─── Maslahat oynasi ───────────────────────────────────────────────────────
@@ -280,10 +286,10 @@ export function TrendChart({
 
       {options.length > 0 && (
         <p className="small muted" style={{ marginTop: 6 }}>
-          Ikkinchi chiziq — shu davrda eng yaxshi ketayotgan sherigingiz.
+          Ikkinchi chiziq — shu davrda eng yaxshi ketayotgan do'stingiz.
           {options.length > 1
             ? " Uchinchisini o'zingiz tanlaysiz."
-            : " Uchinchisi — qolgan sherigingiz."}{" "}
+            : " Uchinchisi — qolgan do'stingiz."}{" "}
           Uchtadan ko'p chiziq bir grafikda ajratilmay qoladi; hammasi reyting
           jadvalida.
         </p>

@@ -14,9 +14,9 @@ START_NEW = (
     "🌙 <b>Kechqurun</b> ertangi kunga reja yozasiz\n"
     "☀️ <b>Ertalab</b> bot rejani eslatadi\n"
     "✅ <b>Kun davomida</b> bajarganingizni belgilaysiz\n"
-    "👀 <b>Sherigingiz</b> buni ko'rib turadi — va siz ham uni\n\n"
+    "👀 <b>Do'stingiz</b> buni ko'rib turadi — va siz ham uni\n\n"
     "Butun gap shunda: yolg'iz o'zingizga va'da bersangiz tashlab yuborasiz, "
-    "sherigingiz ko'rib turganda esa yo'q.\n\n"
+    "do'stingiz ko'rib turganda esa yo'q.\n\n"
     "Boshlash uchun ilovani oching 👇"
 )
 
@@ -30,12 +30,12 @@ HELP = (
     "• <b>Streak</b> — ketma-ket muvaffaqiyatli kunlar. Kun muvaffaqiyatli "
     "hisoblanadi, agar rejaning kamida {pct}% i bajarilsa.\n"
     "• <b>Ball</b> — har bajarilgan vazifa uchun. Haftalik reyting shundan chiqadi.\n\n"
-    "<b>Maxfiylik.</b> Har odat uchun alohida sozlaysiz: sherik nomini ham "
+    "<b>Maxfiylik.</b> Har odat uchun alohida sozlaysiz: do'stingiz nomini ham "
     "ko'radi, yoki faqat foizga qo'shiladi, yoki umuman ko'rmaydi. "
     "Yashirin vazifalar jamoa reytingiga kirmaydi.\n\n"
     "<b>Buyruqlar</b>\n"
     "/start — ilovani ochish\n"
-    "/jamoa — taklif kodi va sheriklar\n"
+    "/jamoa — taklif kodi va do'stlar\n"
     "/qoshil KOD — jamoaga qo'shilish\n"
     "/bugun — bugungi reja\n"
     "/help — shu yordam"
@@ -46,7 +46,7 @@ HELP = (
 GROUP_INFO = (
     "<b>{group_name}</b>\n\n"
     "Taklif kodi: <code>{code}</code>\n\n"
-    "Sherigingizga shu kodni yuboring. U botni ochib "
+    "Do'stingizga shu kodni yuboring. U botni ochib "
     "<code>/qoshil {code}</code> deb yozsa, jamoaga qo'shiladi.\n\n"
     "{members_block}"
 )
@@ -60,7 +60,7 @@ GROUP_INFO_MEMBER = (
 
 GROUP_MEMBERS_TITLE = "A'zolar:"
 GROUP_ALONE = (
-    "Hozircha jamoada yolg'izsiz. Ilovaning butun ma'nosi sherikda — "
+    "Hozircha jamoada yolg'izsiz. Ilovaning butun ma'nosi do'stda — "
     "kodni yuboring 🙂"
 )
 
@@ -82,7 +82,7 @@ MEMBER_REMOVED = "<b>{name}</b> jamoadan chiqarildi."
 
 PARTNER_LEFT = (
     "<b>{name}</b> <b>{group_name}</b> jamoasidan chiqdi.\n\n"
-    "Uning rejalari endi sizga ko'rinmaydi. Yangi sherikni taklif kodi bilan "
+    "Uning rejalari endi sizga ko'rinmaydi. Yangi do'stni taklif kodi bilan "
     "chaqirishingiz mumkin."
 )
 YOU_ARE_OWNER_NOW = (
@@ -170,8 +170,8 @@ ADMIN_REPORT = (
     "👥 <b>Odamlar</b>\n"
     "Jami: <b>{total}</b> · bloklagan: {blocked}\n"
     "Yangi: bugun {new_today} · 7 kun {new_7d} · 30 kun {new_30d}\n\n"
-    "🤝 <b>Sherik</b>\n"
-    "Sherigi bor: <b>{with_partner}</b>\n"
+    "🤝 <b>Do'st</b>\n"
+    "Do'sti bor: <b>{with_partner}</b>\n"
     "Yolg'iz: <b>{alone}</b>\n"
     "Jamoalar: {groups} (2+ kishilik: {paired_groups})\n\n"
     "⚡ <b>Faollik</b>\n"

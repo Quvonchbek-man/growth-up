@@ -100,10 +100,21 @@ async def get_tasks(session: AsyncSession, user_id: int, d: date_type) -> list[T
     return list(rows)
 
 
-async def _generate_habit_tasks(
-    session: AsyncSession, user: User, d: date_type
-) -> int:
-    """Shu kunga tegishli odatlardan vazifa nusxalarini yaratadi.
+async def _sync_habit_tasks(session: AsyncSession, user: User, d: date_type) -> int:
+    """Kunning odat nusxalarini odatlarning JADVALIGA moslaydi.
+
+    Ikki tomonlama: tegishli kunga nusxa yaratadi va **tegishli bo'lmagan
+    kundan olib tashlaydi**. Ikkinchisisiz odatning jadvali torayganda
+    (masalan «har kuni» → Du/Ch/Ju) allaqachon yaratilgan nusxa yakshanba
+    rejasida qolib ketardi — ya'ni tanlangan kunlar ishlamayotgandek
+    ko'rinardi.
+
+    Ikkita himoya sharti bor va ikkalasi ham majburiy:
+    - `source == HABIT` — qo'lda qo'shilgan odat (`add_habit_task`) `MANUAL`
+      bo'ladi. Usiz foydalanuvchi ataylab qo'shgan ish sahifa har ochilganda
+      jimgina yo'qolardi.
+    - `status == PLANNED` — bajarilgan yoki o'tkazilgan ish hech qachon
+      o'chmaydi, aks holda tarix soxtalashardi.
 
     Takror yaratmaydi: `UNIQUE(user_id, date, habit_id)` cheklovi bor, lekin
     unga tayanmasdan avval mavjudlarini o'qiymiz — xato emas, oddiy holat.
@@ -118,49 +129,62 @@ async def _generate_habit_tasks(
     if not habits:
         return 0
 
-    existing = set(
-        await session.scalars(
-            select(Task.habit_id).where(
+    existing: dict[int, Task] = {
+        task.habit_id: task
+        for task in await session.scalars(
+            select(Task).where(
                 Task.user_id == user.id,
                 Task.date == d,
                 Task.habit_id.is_not(None),
             )
         )
-    )
+    }
 
-    created = 0
+    changed = 0
     for habit in habits:
-        if habit.id in existing or not habit.is_active_on(d):
-            continue
-        session.add(
-            Task(
-                user_id=user.id,
-                date=d,
-                title=habit.title,
-                source=TaskSource.HABIT,
-                habit_id=habit.id,
-                points=habit.points,
-                visibility=habit.visibility,
-                sort_order=habit.sort_order,
-                start_time=habit.start_time,
-                end_time=habit.end_time,
-                status=TaskStatus.PLANNED,
-            )
-        )
-        created += 1
+        task = existing.get(habit.id)
+        active = habit.is_active_on(d)
 
-    if created:
+        if task is None:
+            if not active:
+                continue
+            session.add(
+                Task(
+                    user_id=user.id,
+                    date=d,
+                    title=habit.title,
+                    source=TaskSource.HABIT,
+                    habit_id=habit.id,
+                    points=habit.points,
+                    visibility=habit.visibility,
+                    sort_order=habit.sort_order,
+                    start_time=habit.start_time,
+                    end_time=habit.end_time,
+                    status=TaskStatus.PLANNED,
+                )
+            )
+            changed += 1
+        elif (
+            not active
+            and task.source == TaskSource.HABIT
+            and task.status == TaskStatus.PLANNED
+        ):
+            await session.delete(task)
+            changed += 1
+
+    if changed:
         await session.flush()
-    return created
+    return changed
 
 
 async def open_day(
     session: AsyncSession, user: User, d: date_type, *, generate: bool = True
 ) -> tuple[DailyPlan, list[Task]]:
-    """Kunni ochadi: `DailyPlan` yaratadi va odatlardan vazifa nusxalaydi.
+    """Kunni ochadi: `DailyPlan` yaratadi va odat nusxalarini jadvalga moslaydi.
 
     `generate` faqat bugun va kelajak uchun ishlaydi. O'tmish kunga odat
-    qo'shish soxta tarix yaratardi — hech qachon qilmaymiz.
+    qo'shish soxta tarix yaratardi — hech qachon qilmaymiz. Shu sabab
+    jadvaldan chiqib qolgan nusxani tozalash ham faqat shu yerdan o'tadi.
     """
     plan = await get_plan(session, user.id, d)
     if plan is None:
@@ -169,7 +193,7 @@ async def open_day(
         await session.flush()
 
     if generate and d >= clock.today_local(user.tz):
-        await _generate_habit_tasks(session, user, d)
+        await _sync_habit_tasks(session, user, d)
 
     tasks = await get_tasks(session, user.id, d)
     await recalc_day(session, user.id, d, tasks=tasks, plan=plan)
@@ -250,6 +274,46 @@ async def add_task(
         start_time=start_time,
         end_time=end_time,
         is_extra=is_extra,
+        status=TaskStatus.PLANNED,
+    )
+    session.add(task)
+    await session.flush()
+    await recalc_day(session, user.id, d)
+    return task
+
+
+async def add_habit_task(
+    session: AsyncSession, user: User, d: date_type, habit: Habit
+) -> Task:
+    """Odatni jadvalida yo'q kunga QO'LDA qo'shadi.
+
+    `source` ataylab `MANUAL`: bu nusxani odatning jadvali emas, odam o'zi
+    yaratdi. Shundan ikki natija chiqadi — `_sync_habit_tasks` uni keyingi
+    ochilishda o'chirmaydi va ro'yxatda ✕ tugmasi bilan chiqadi (o'zi
+    qo'shgan ishni o'zi olib tashlay oladi). `habit_id` esa saqlanadi:
+    issiqlik xaritasi va statistika buni o'sha odatning kuni deb sanaydi.
+
+    `is_extra=False` — chaqiruvchi buni faqat kelajakdagi kunga ruxsat
+    beradi, ya'ni bu kechqurun beriladigan va'daning bir qismi.
+    """
+    last_order = await session.scalar(
+        select(Task.sort_order)
+        .where(Task.user_id == user.id, Task.date == d)
+        .order_by(Task.sort_order.desc())
+        .limit(1)
+    )
+    task = Task(
+        user_id=user.id,
+        date=d,
+        title=habit.title,
+        source=TaskSource.MANUAL,
+        habit_id=habit.id,
+        points=habit.points,
+        visibility=habit.visibility,
+        sort_order=(last_order or 0) + 1,
+        start_time=habit.start_time,
+        end_time=habit.end_time,
+        is_extra=False,
         status=TaskStatus.PLANNED,
     )
     session.add(task)
@@ -363,8 +427,11 @@ async def move_task(
     task = await session.get(Task, task_id)
     if task is None or task.user_id != user.id:
         return None
-    if task.source == TaskSource.HABIT:
-        # Odat nusxasini ko'chirish mantiqsiz — u ertaga baribir yaratiladi
+    if task.habit_id is not None:
+        # Odat nusxasini ko'chirish mantiqsiz — u ertaga baribir yaratiladi.
+        # Shart `source` bo'yicha emas, `habit_id` bo'yicha: qo'lda qo'shilgan
+        # odat `MANUAL` bo'ladi, uni ko'chirish `UNIQUE(user, date, habit_id)`
+        # ni buzib yuborardi.
         return None
 
     old_date = task.date

@@ -1,33 +1,39 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import { api, type DayView, type Task } from "../api";
+import { api, type DayView, type Habit, type Task } from "../api";
 import { Card, ErrorBox, Loading, TaskComposer, TaskRow, TimeEditor } from "../components/ui";
 import { useAsync } from "../hooks";
-import { alertUser, inTelegram, notify, showMainButton } from "../telegram";
+import { alertUser, haptic, notify, popupConfirm } from "../telegram";
 
 export default function Tomorrow() {
   const day = useAsync<DayView>(() => api.day("tomorrow"), []);
+  const habits = useAsync<Habit[]>(() => api.habits(), []);
   const [editing, setEditing] = useState<number | null>(null);
 
   const view = day.data;
   const submitted = view?.submitted ?? false;
 
-  // Telegram'ning pastdagi katta tugmasi — tasdiqlash uchun eng qulay joy
-  useEffect(() => {
-    if (!view || submitted) return;
-    return showMainButton("Rejani tasdiqlash", () => {
-      void submit();
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view?.date, submitted, view?.planned_count]);
-
   if (day.loading && !view) return <Loading />;
   if (day.error) return <ErrorBox message={day.error} onRetry={day.reload} />;
   if (!view) return null;
 
+  // Ro'yxatda yo'q odatlar = ertangi kunning jadvaliga tushmaganlari
+  // (tushganlari server tomonidan o'zi qo'shilgan)
+  const inPlan = new Set(view.tasks.map((task) => task.habit_id));
+  const offDay = (habits.data ?? []).filter((habit) => !inPlan.has(habit.id));
+
   async function addTask(title: string, start: string, end: string) {
     try {
       day.setData(await api.addTask("tomorrow", title, { start_time: start, end_time: end }));
+    } catch (error) {
+      alertUser(error instanceof Error ? error.message : "Qo'shib bo'lmadi");
+    }
+  }
+
+  async function addHabit(habit: Habit) {
+    haptic();
+    try {
+      day.setData(await api.addHabitTask("tomorrow", habit.id));
     } catch (error) {
       alertUser(error instanceof Error ? error.message : "Qo'shib bo'lmadi");
     }
@@ -52,6 +58,16 @@ export default function Tomorrow() {
   }
 
   async function submit() {
+    // Tasdiq — bexosdan bosishdan yagona himoya: `submitted_at` bir marta
+    // qo'yiladi va uni qaytarish yo'li yo'q
+    const ok = await popupConfirm(
+      "Rejani tasdiqlash",
+      "Ertangi kun rejasini tasdiqlashga tayyormisiz?",
+      "Ha, ishonchim komil",
+      "Yo'q, o'zgartiraman",
+    );
+    if (!ok) return;
+
     try {
       day.setData(await api.submitDay("tomorrow"));
       notify("success");
@@ -68,15 +84,22 @@ export default function Tomorrow() {
         {view.date} · {view.planned_count} ish · {view.max_score} ball imkoni
       </p>
 
+      {/* Tugma ATAYLAB tepada: pastda turganda tab qatorining ustiga tushib,
+          tab bosgan barmoq unga tegib ketardi */}
       {submitted ? (
         <div className="chip" style={{ alignSelf: "flex-start" }}>
           ✅ Reja tasdiqlangan
         </div>
       ) : (
-        <div className="error">
-          Reja hali tasdiqlanmagan. Tasdiqlamasangiz, sherigingizga
-          «hali reja kiritmadi» degan xabar boradi.
-        </div>
+        <>
+          <button className="btn btn--block" onClick={() => void submit()}>
+            Rejani tasdiqlash
+          </button>
+          <div className="error">
+            Reja hali tasdiqlanmagan. Tasdiqlamasangiz, do'stingizga
+            «hali reja kiritmadi» degan xabar boradi.
+          </div>
+        </>
       )}
 
       <section className="card card--tight">
@@ -103,19 +126,44 @@ export default function Tomorrow() {
         )}
       </section>
 
+      {/* Jadvalga kirmagan odatlar: avtomatik qo'shilmaydi, lekin bir bosishda
+          qo'shsa bo'ladi — qo'lda qo'shilgani ✕ bilan chiqadi */}
+      {offDay.length > 0 && (
+        <Card title="Odatlardan qo'shish">
+          <p className="small muted" style={{ marginTop: 0 }}>
+            Bu kunga rejalashtirilmagan odatlar. Kerak bo'lsa qo'shib qo'ying.
+          </p>
+
+          {offDay.map((habit) => (
+            <div className="task" key={habit.id} style={{ cursor: "default" }}>
+              <span style={{ fontSize: 19 }}>{habit.icon}</span>
+              <span className="task__title">
+                {habit.start_time && (
+                  <span className="task__time">
+                    {habit.end_time ? `${habit.start_time}–${habit.end_time}` : habit.start_time}
+                  </span>
+                )}
+                {habit.title}
+              </span>
+              <span className="task__meta">{habit.points} ball</span>
+              <button
+                className="btn btn--small"
+                onClick={() => void addHabit(habit)}
+                aria-label={`${habit.title} — ertangi rejaga qo'shish`}
+              >
+                +
+              </button>
+            </div>
+          ))}
+        </Card>
+      )}
+
       <Card title="Qo'shimcha vazifa">
         <TaskComposer placeholder="Masalan: hisobotni tugatish" onAdd={addTask} />
         <p className="small muted" style={{ marginTop: 8 }}>
           ⏱ bilan vaqt belgilasangiz, boshlanishidan oldin eslatma keladi.
         </p>
       </Card>
-
-      {/* Telegram'dan tashqarida MainButton yo'q — oddiy tugma kerak */}
-      {!inTelegram && !submitted && (
-        <button className="btn btn--block" onClick={() => void submit()}>
-          Rejani tasdiqlash
-        </button>
-      )}
     </div>
   );
 }

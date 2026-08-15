@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 COMMANDS = [
     BotCommand(command="start", description="Ilovani ochish"),
     BotCommand(command="bugun", description="Bugungi reja"),
-    BotCommand(command="jamoa", description="Taklif kodi va sheriklar"),
+    BotCommand(command="jamoa", description="Taklif kodi va do'stlar"),
     BotCommand(command="help", description="Qanday ishlaydi"),
 ]
 

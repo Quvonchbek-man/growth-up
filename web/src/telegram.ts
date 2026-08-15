@@ -16,18 +16,6 @@ interface TgWebApp {
   expand: () => void;
   close: () => void;
   onEvent: (event: string, cb: () => void) => void;
-  MainButton: {
-    text: string;
-    show: () => void;
-    hide: () => void;
-    enable: () => void;
-    disable: () => void;
-    showProgress: (leaveActive?: boolean) => void;
-    hideProgress: () => void;
-    setText: (text: string) => void;
-    onClick: (cb: () => void) => void;
-    offClick: (cb: () => void) => void;
-  };
   BackButton?: {
     show: () => void;
     hide: () => void;
@@ -40,6 +28,14 @@ interface TgWebApp {
   };
   showAlert?: (message: string) => void;
   showConfirm?: (message: string, cb: (ok: boolean) => void) => void;
+  showPopup?: (
+    params: {
+      title?: string;
+      message: string;
+      buttons: { id: string; type?: string; text?: string }[];
+    },
+    cb: (buttonId: string) => void,
+  ) => void;
 }
 
 declare global {
@@ -85,20 +81,73 @@ export function alertUser(message: string): void {
   else window.alert(message);
 }
 
+/**
+ * SDK metodini chaqirib, javobini `Promise` qilib qaytaradi.
+ *
+ * `undefined` qaytsa — metodni ishlatib bo'lmaydi. Ikki sabab bor va
+ * ikkalasi ham haqiqiy: metod umuman yo'q (juda eski SDK) yoki **bor,
+ * lekin chaqirilganda `WebAppMethodUnsupported` deb otiladi** — Telegram
+ * mijozining versiyasi yetmaganda shunday bo'ladi (`showConfirm` va
+ * `showPopup` — 6.2 dan). Ikkinchisini `new Promise` ichida ushlab
+ * bo'lmaydi: u xatoni `reject` ga aylantiradi va tugma bosilganda
+ * ilova jimgina hech narsa qilmay qo'yadi.
+ */
+function askViaSdk(call: (resolve: (ok: boolean) => void) => void): Promise<boolean> | undefined {
+  let settle!: (ok: boolean) => void;
+  const answer = new Promise<boolean>((resolve) => {
+    settle = resolve;
+  });
+  try {
+    call(settle);
+  } catch {
+    return undefined;
+  }
+  return answer;
+}
+
 /** Qaytarib bo'lmaydigan amallar uchun tasdiq (a'zoni chiqarish, kodni yangilash). */
 export function confirmUser(message: string): Promise<boolean> {
   if (tg?.showConfirm) {
-    return new Promise((resolve) => tg.showConfirm!(message, resolve));
+    const answer = askViaSdk((resolve) => tg.showConfirm!(message, resolve));
+    if (answer) return answer;
   }
   return Promise.resolve(window.confirm(message));
 }
 
 /**
- * Telegram'ning pastdagi katta tugmasini ko'rsatadi.
+ * Tugmalari o'z matniga ega tasdiq oynasi.
  *
- * Bu React hook EMAS (nomi `use` bilan boshlanmasligi ataylab) — uni
- * `useEffect` ichidan chaqirib, qaytgan funksiyani tozalash uchun ishlatamiz.
+ * `showConfirm` dan farqi shu: undagi tugmalar doim OK/Bekor, ya'ni
+ * «nimani tasdiqlayapman?» degan savolga javob bermaydi. `showPopup`
+ * eski mijozlarda yo'q — o'shanda `showConfirm` ga, brauzerda esa
+ * `window.confirm` ga tushamiz (matn savol qatorida bo'lgani uchun
+ * ma'no ikkalasida ham saqlanadi).
  */
+export function popupConfirm(
+  title: string,
+  message: string,
+  okText: string,
+  cancelText: string,
+): Promise<boolean> {
+  if (tg?.showPopup) {
+    const answer = askViaSdk((resolve) =>
+      tg.showPopup!(
+        {
+          title,
+          message,
+          buttons: [
+            { id: "ok", type: "default", text: okText },
+            { id: "cancel", type: "default", text: cancelText },
+          ],
+        },
+        (buttonId) => resolve(buttonId === "ok"),
+      ),
+    );
+    if (answer) return answer;
+  }
+  return confirmUser(message);
+}
+
 /**
  * Telegram'ning yuqoridagi «orqaga» tugmasi (sozlamalar oynasini yopish uchun).
  *
@@ -110,18 +159,6 @@ export function showBackButton(onClick: () => void): () => void {
   if (!button) return () => {};
   button.onClick(onClick);
   button.show();
-  return () => {
-    button.offClick(onClick);
-    button.hide();
-  };
-}
-
-export function showMainButton(text: string, onClick: () => void): () => void {
-  if (!tg) return () => {};
-  const button = tg.MainButton;
-  button.setText(text);
-  button.show();
-  button.onClick(onClick);
   return () => {
     button.offClick(onClick);
     button.hide();

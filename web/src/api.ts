@@ -243,6 +243,9 @@ export const api = {
       start_time: opts.start_time || null,
       end_time: opts.end_time || null,
     }),
+  /** Jadvalida yo'q kunga odatni qo'lda qo'shish (faqat kelajakdagi kun) */
+  addHabitTask: (day: string, habitId: number) =>
+    post<DayView>(`/day/${day}/habits`, { habit_id: habitId }),
   submitDay: (day: string) => post<DayView>(`/day/${day}/submit`),
   setStatus: (taskId: number, status: TaskStatus, reason?: string) =>
     patch<DayView>(`/tasks/${taskId}`, { status, reason }),
