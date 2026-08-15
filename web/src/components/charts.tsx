@@ -2,12 +2,13 @@
  * Grafiklar.
  *
  * Rang qoidalari (tekshiruvdan o'tgan palitra, `theme.css` ga qarang):
- *  • Kategoriyali slotlar qat'iy tartibda: men → 1, birinchi sherik → 2,
- *    ikkinchi → 3. Rang ODAMGA biriktiriladi, o'ringa emas — reyting
- *    o'zgarganda ranglar sakramaydi.
  *  • Uchtadan ortiq odam bir grafikda ko'rsatilmaydi: to'rtinchi rangdan
- *    boshlab juftliklar rang ko'rligida ajratilmay qoladi. Ortiqchasi
- *    jadvalga tushadi.
+ *    boshlab juftliklar rang ko'rligida ajratilmay qoladi.
+ *  • Rang **ROLGA** biriktiriladi, shaxsga emas: 1 — men, 2 — eng zo'r
+ *    ketayotgan sherik, 3 — o'zim tanlagan odam. Ikkinchi slotdagi odam
+ *    kundan kunga o'zgarishi mumkin (kim oldinda bo'lsa — o'sha), ya'ni
+ *    rangni odamga bog'lab bo'lmaydi. **Shaxsni izoh (legend) ko'rsatadi**,
+ *    shuning uchun izoh ixtiyoriy emas — usiz grafik o'qilmay qoladi.
  *  • Holat ranglari (bajarildi/bajarilmadi) seriya rangi sifatida
  *    ishlatilmaydi va yolg'iz rangga tayanmaydi — heatmap'da to'ldirish va
  *    halqa farqi qo'shimcha belgi bo'lib xizmat qiladi.
@@ -28,8 +29,9 @@ import {
 import type { SeriesPoint, StatsView } from "../api";
 import { Legend } from "./ui";
 
+// Uchta slot: men · eng zo'r sherik · tanlangan sherik.
+// Chegara `comparePeople()` da amalga oshadi.
 export const SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)"];
-export const MAX_SERIES = SERIES_COLORS.length;
 
 const AXIS_TICK = { fill: "var(--ink-muted)", fontSize: 11 };
 
@@ -101,11 +103,104 @@ interface TrendRow {
   [key: string]: string | number;
 }
 
-export function TrendChart({ stats }: { stats: StatsView }) {
-  const partners = stats.partners.slice(0, MAX_SERIES - 1);
-  const people = [{ key: "me", name: "Men", series: stats.series }].concat(
-    partners.map((p) => ({ key: `u${p.user_id}`, name: p.name, series: p.series })),
-  );
+type PartnerSeries = StatsView["partners"][number];
+
+/** Grafikdagi bitta chiziq. `userId` faqat sheriklarda bo'ladi. */
+export interface ComparePerson {
+  key: string;
+  name: string;
+  note?: string;
+  userId?: number;
+  series: SeriesPoint[];
+}
+
+export interface CompareChoice {
+  people: ComparePerson[];
+  /** Tanlash mumkin bo'lgan sheriklar (eng zo'ri ro'yxatda yo'q) */
+  options: PartnerSeries[];
+  /** Uchinchi slotda kim turibdi */
+  selectedId: number | null;
+}
+
+/**
+ * Reja bo'lgan kunlarning o'rtacha bajarilish foizi.
+ *
+ * Bo'sh kunlar (`planned = 0`) hisobga kirmaydi: ilovaga kirmagan kun
+ * odamni sun'iy pastga tortmasligi kerak. `Stats.tsx` dagi `avgPct` bilan
+ * bir xil qoida.
+ */
+function avgPct(series: SeriesPoint[]): number {
+  const planned = series.filter((point) => point.planned > 0);
+  if (!planned.length) return 0;
+  return planned.reduce((sum, point) => sum + point.pct, 0) / planned.length;
+}
+
+function totalScore(series: SeriesPoint[]): number {
+  return series.reduce((sum, point) => sum + point.score, 0);
+}
+
+/**
+ * Kim grafikka tushishini hal qiladi: **men → eng zo'r → tanlangan**.
+ *
+ * Nega qo'shilish tartibi emas: 10 kishilik jamoada birinchi ikki sherik
+ * bilan taqqoslash tasodifiy raqam beradi. Oldinda ketayotgan odam esa
+ * «qayerda turibman» degan savolga javob beradi.
+ *
+ * Tanlangan odam jamoadan chiqib ketgan bo'lsa (yoki aynan eng zo'r bo'lib
+ * qolsa) — ikkinchi o'rindagi odamga tushadi, ya'ni uchinchi chiziq hech
+ * qachon bo'sh qolmaydi.
+ */
+export function comparePeople(
+  stats: StatsView,
+  selectedId: number | null,
+): CompareChoice {
+  const me: ComparePerson = { key: "me", name: "Men", series: stats.series };
+
+  // Tenglikda: yuqori ball, keyin ism — tartib barqaror bo'lsin
+  const ranked = [...stats.partners].sort((a, b) => {
+    const byPct = avgPct(b.series) - avgPct(a.series);
+    if (byPct !== 0) return byPct;
+    const byScore = totalScore(b.series) - totalScore(a.series);
+    if (byScore !== 0) return byScore;
+    return a.name.localeCompare(b.name);
+  });
+
+  if (!ranked.length) {
+    return { people: [me], options: [], selectedId: null };
+  }
+
+  const [best, ...rest] = ranked;
+  const asPerson = (p: PartnerSeries, note?: string): ComparePerson => ({
+    key: `u${p.user_id}`,
+    name: p.name,
+    note,
+    userId: p.user_id,
+    series: p.series,
+  });
+
+  if (!rest.length) {
+    // Yolg'iz sherik — «eng zo'r» deb belgilashning ma'nosi yo'q
+    return { people: [me, asPerson(best)], options: [], selectedId: null };
+  }
+
+  const chosen = rest.find((p) => p.user_id === selectedId) ?? rest[0];
+  return {
+    people: [me, asPerson(best, "eng zo'r"), asPerson(chosen)],
+    options: rest,
+    selectedId: chosen.user_id,
+  };
+}
+
+export function TrendChart({
+  stats,
+  selectedId = null,
+  onSelect,
+}: {
+  stats: StatsView;
+  selectedId?: number | null;
+  onSelect?: (userId: number) => void;
+}) {
+  const { people, options, selectedId: shownId } = comparePeople(stats, selectedId);
 
   // Bir kunning barcha odamlari — bitta qator
   const rows: TrendRow[] = stats.series.map((point, index) => {
@@ -157,17 +252,40 @@ export function TrendChart({ stats }: { stats: StatsView }) {
         </ResponsiveContainer>
       </div>
 
+      {/* Rang rolga biriktirilgani uchun izoh majburiy — kim qaysi chiziq
+          ekanini faqat shu yer aytadi */}
       <Legend
         items={people.map((person, index) => ({
           color: SERIES_COLORS[index],
-          label: person.name,
+          label: person.note ? `${person.name} · ${person.note}` : person.name,
         }))}
       />
 
-      {stats.partners.length > MAX_SERIES - 1 && (
+      {options.length > 1 && onSelect && (
+        <label className="row row--between" style={{ marginTop: 10, gap: 10 }}>
+          <span className="small muted">Kim bilan taqqoslay?</span>
+          <select
+            value={shownId ?? ""}
+            onChange={(event) => onSelect(Number(event.target.value))}
+            style={{ width: "auto", flex: 1, maxWidth: 190 }}
+          >
+            {options.map((partner) => (
+              <option key={partner.user_id} value={partner.user_id}>
+                {partner.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {options.length > 0 && (
         <p className="small muted" style={{ marginTop: 6 }}>
-          Grafikda birinchi {MAX_SERIES} kishi ko'rsatilgan — ko'proq chiziq
-          rang ko'rligida ajratilmay qoladi. Qolganlari reyting jadvalida.
+          Ikkinchi chiziq — shu davrda eng yaxshi ketayotgan sherigingiz.
+          {options.length > 1
+            ? " Uchinchisini o'zingiz tanlaysiz."
+            : " Uchinchisi — qolgan sherigingiz."}{" "}
+          Uchtadan ko'p chiziq bir grafikda ajratilmay qoladi; hammasi reyting
+          jadvalida.
         </p>
       )}
     </>
@@ -211,6 +329,99 @@ export function ReasonsChart({ reasons }: { reasons: StatsView["reasons"] }) {
         </BarChart>
       </ResponsiveContainer>
     </div>
+  );
+}
+
+// ─── A'zolar dinamikasi (admin paneli) ─────────────────────────────────────
+
+export interface MemberPoint {
+  date: string;
+  total: number;
+  active: number;
+  joined: number;
+  left: number;
+}
+
+/**
+ * A'zolar dinamikasi — jamg'arma chiziq.
+ *
+ * Nega ustun emas, chiziq: kunlik qo'shilish ustunlari o'sish qanday
+ * ketayotganini ko'rsatmaydi. 10 kishi kelib 9 tasi ketgan kun ham, 10
+ * kishi kelib hech kim ketmagan kun ham bir xil ustun beradi. Ikki chiziq
+ * orasidagi masofa esa aynan yo'qotishni ko'rsatadi.
+ */
+export function MembersChart({ points }: { points: MemberPoint[] }) {
+  if (!points.length) return <p className="empty">Ma'lumot yo'q.</p>;
+
+  const data = points.map((p) => ({
+    date: shortDate(p.date),
+    total: p.total,
+    active: p.active,
+    joined: p.joined,
+    left: p.left,
+  }));
+  const oxirgi = points[points.length - 1];
+  const birinchi = points[0];
+  const yoqotish = oxirgi.total - oxirgi.active;
+
+  return (
+    <>
+      <div className="chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -22 }}>
+            <CartesianGrid stroke="var(--grid)" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={AXIS_TICK}
+              stroke="var(--axis)"
+              interval="preserveStartEnd"
+              minTickGap={28}
+            />
+            <YAxis
+              tick={AXIS_TICK}
+              stroke="var(--axis)"
+              width={44}
+              allowDecimals={false}
+              domain={[0, "auto"]}
+            />
+            <Tooltip
+              content={<ChartTooltip suffix=" kishi" />}
+              cursor={{ stroke: "var(--axis)", strokeWidth: 1 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="total"
+              name="Jami"
+              stroke={SERIES_COLORS[0]}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--card)" }}
+            />
+            <Line
+              type="monotone"
+              dataKey="active"
+              name="Faol"
+              stroke={SERIES_COLORS[1]}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--card)" }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <Legend
+        items={[
+          { color: SERIES_COLORS[0], label: "Jami ro'yxatdan o'tgan" },
+          { color: SERIES_COLORS[1], label: "Faol (bloklamagan)" },
+        ]}
+      />
+
+      <p className="small muted" style={{ marginTop: 6, marginBottom: 0 }}>
+        Davr boshida {birinchi.total} → hozir <strong>{oxirgi.total}</strong> kishi
+        {yoqotish > 0 && <> · ikki chiziq orasidagi {yoqotish} — botni bloklaganlar</>}
+      </p>
+    </>
   );
 }
 

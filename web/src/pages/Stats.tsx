@@ -11,10 +11,39 @@ const RANGES = [
   { days: 90, label: "90 kun" },
 ];
 
+/**
+ * Taqqoslash uchun tanlangan sherik — brauzer xotirasida.
+ *
+ * Serverda saqlanmaydi: bu ko'rinish sozlamasi, ma'lumot emas. Baza
+ * o'zgarmasa migratsiya ham kerak emas. Narxi — boshqa telefonda qaytadan
+ * tanlanadi; tanlov bir bosish bo'lgani uchun bu arziydi.
+ */
+const TANLOV_KALITI = "growth:taqqoslash";
+
+function oqilganTanlov(): number | null {
+  try {
+    const raw = localStorage.getItem(TANLOV_KALITI);
+    return raw ? Number(raw) || null : null;
+  } catch {
+    // Telegram WebView'da xotira yopiq bo'lishi mumkin — grafik baribir ishlaydi
+    return null;
+  }
+}
+
 export default function Stats() {
   const [days, setDays] = useState(30);
   const [asTable, setAsTable] = useState(false);
+  const [compareId, setCompareId] = useState<number | null>(oqilganTanlov);
   const stats = useAsync<StatsView>(() => api.stats(days), [days]);
+
+  function tanla(userId: number) {
+    setCompareId(userId);
+    try {
+      localStorage.setItem(TANLOV_KALITI, String(userId));
+    } catch {
+      // Saqlanmasa ham joriy sessiyada ishlayveradi
+    }
+  }
 
   if (stats.loading && !stats.data) return <Loading />;
   if (stats.error) return <ErrorBox message={stats.error} onRetry={stats.reload} />;
@@ -53,7 +82,11 @@ export default function Stats() {
       />
 
       <Card title={`Bajarilish — ${days} kun`}>
-        {asTable ? <SeriesTable series={view.series} /> : <TrendChart stats={view} />}
+        {asTable ? (
+          <SeriesTable series={view.series} />
+        ) : (
+          <TrendChart stats={view} selectedId={compareId} onSelect={tanla} />
+        )}
         <button
           className="btn btn--small btn--ghost"
           style={{ marginTop: 10 }}
